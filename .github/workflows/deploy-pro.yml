@@ -1,0 +1,80 @@
+# Deploy to the cloud.
+# Every push to pro builds one image per folder with a Dockerfile and pushes it to
+# GitHub Container Registry as ghcr.io/<owner>/<repo>-<folder>:pro (plus a sha tag).
+# Nothing connects to the server: Watchtower on the Oracle VM pulls the new :pro
+# images and restarts the containers. With no Dockerfile yet, the run just reports it.
+name: Deploy (pro)
+
+on:
+  push:
+    branches: [pro]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-pro
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  # The Oracle Always Free VM is an Ampere (Arm) machine.
+  # Set the repository variable IMAGE_PLATFORMS to e.g. linux/amd64,linux/arm64 to change it.
+  PLATFORMS: ${{ vars.IMAGE_PLATFORMS || 'linux/arm64' }}
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.find.outputs.images }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find Dockerfiles
+        id: find
+        run: |
+          images=$(find . \( -name .git -o -name node_modules \) -prune -o -type f -name Dockerfile -printf '%h\n' \
+            | sed 's|^\./||' | sort -u \
+            | jq -R -s -c 'split("\n") | map(select(length > 0)) | map({dir: ., name: (if . == "." then "app" else (split("/") | last) end)})')
+          echo "images=$images" | tee -a "$GITHUB_OUTPUT"
+          if [ "$images" = "[]" ]; then
+            echo "::notice::No Dockerfile found yet, nothing to deploy."
+          fi
+
+  build-and-push:
+    needs: discover
+    if: needs.discover.outputs.images != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.discover.outputs.images) }}
+    name: Image ${{ matrix.image.name }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image name
+        id: name
+        run: |
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "image=ghcr.io/$owner/${{ github.event.repository.name }}-${{ matrix.image.name }}" >> "$GITHUB_OUTPUT"
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image.dir }}
+          platforms: ${{ env.PLATFORMS }}
+          push: true
+          tags: |
+            ${{ steps.name.outputs.image }}:pro
+            ${{ steps.name.outputs.image }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.image.dir }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.dir }}

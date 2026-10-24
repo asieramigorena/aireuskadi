@@ -1,0 +1,153 @@
+# CI for work in progress.
+# Runs on every push to dev and on every pull request into dev, pro or main.
+# Components are discovered from the files they contain, so the workflow passes
+# (with nothing to do) while the repository has no application code yet:
+#   - Python: any folder with pyproject.toml or requirements.txt
+#   - Node.js / TypeScript: any folder with package.json
+#   - Docker: any folder with a Dockerfile, plus compose.yaml / docker-compose.yml
+name: CI
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev, pro, main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  branch-flow:
+    name: Branch flow (dev -> pro -> main)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the promotion order
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          case "$BASE" in
+            pro)  [ "$HEAD" = "dev" ] || { echo "::error::Only dev can be merged into pro (got $HEAD)"; exit 1; } ;;
+            main) [ "$HEAD" = "pro" ] || { echo "::error::Only pro can be merged into main (got $HEAD)"; exit 1; } ;;
+          esac
+          echo "OK: $HEAD -> $BASE"
+
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.find.outputs.python }}
+      node: ${{ steps.find.outputs.node }}
+      docker: ${{ steps.find.outputs.docker }}
+      compose: ${{ steps.find.outputs.compose }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find components
+        id: find
+        run: |
+          list() {
+            find . \( -name .git -o -name node_modules -o -name .venv -o -name venv -o -name dist \) -prune \
+              -o -type f \( "$@" \) -printf '%h\n' \
+              | sed 's|^\./||' | sort -u | jq -R -s -c 'split("\n") | map(select(length > 0))'
+          }
+          {
+            echo "python=$(list -name pyproject.toml -o -name requirements.txt)"
+            echo "node=$(list -name package.json)"
+            echo "docker=$(list -name Dockerfile)"
+            echo "compose=$(find . -maxdepth 1 -type f \( -name compose.yaml -o -name compose.yml -o -name docker-compose.yml -o -name docker-compose.yaml \) | head -n1)"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  python:
+    needs: discover
+    if: needs.discover.outputs.python != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: ${{ fromJSON(needs.discover.outputs.python) }}
+    name: Python (${{ matrix.dir }})
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ matrix.dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          if [ -f pyproject.toml ]; then pip install -e ".[dev]" || pip install -e .; fi
+          pip install ruff pytest
+      - name: Lint
+        run: ruff check .
+      - name: Test
+        # Exit code 5 means pytest found no tests, which is fine at this stage.
+        run: pytest || [ $? -eq 5 ]
+
+  node:
+    needs: discover
+    if: needs.discover.outputs.node != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: ${{ fromJSON(needs.discover.outputs.node) }}
+    name: Node.js (${{ matrix.dir }})
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ matrix.dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install
+        run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
+      - name: Lint
+        run: npm run lint --if-present
+      - name: Test
+        run: npm test --if-present
+      - name: Build
+        run: npm run build --if-present
+
+  docker:
+    needs: discover
+    if: needs.discover.outputs.docker != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: ${{ fromJSON(needs.discover.outputs.docker) }}
+    name: Docker build (${{ matrix.dir }})
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image (not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.dir }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.dir }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.dir }}
+
+  compose:
+    needs: discover
+    if: needs.discover.outputs.compose != ''
+    name: Compose file
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate
+        env:
+          COMPOSE_FILE: ${{ needs.discover.outputs.compose }}
+        run: |
+          if [ -f .env.example ] && [ ! -f .env ]; then cp .env.example .env; fi
+          docker compose config --quiet
