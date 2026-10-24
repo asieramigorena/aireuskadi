@@ -1,0 +1,14 @@
+[project]
+name = "aireuskadi-db"
+version = "0.1.0"
+description = "AirEuskadi data model shared by the services that use the database"
+requires-python = ">=3.12"
+dependencies = [
+    "sqlalchemy>=2.0",
+    "geoalchemy2>=0.15",
+    "psycopg[binary]>=3.2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
