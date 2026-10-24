@@ -6,6 +6,8 @@
 #     pyproject.toml is a uv workspace, the whole workspace is checked once from the root
 #   - Node.js / TypeScript: any folder with package.json
 #   - Docker: any folder with a Dockerfile, plus compose.yaml / docker-compose.yml
+# Lint and test failures always show a warning. On pushes to dev they do not turn the
+# run red (work in progress); on pull requests into dev, pro or main they do.
 name: CI
 
 on:
@@ -96,10 +98,24 @@ jobs:
             if [ -f requirements-dev.txt ]; then uv pip install -r requirements-dev.txt; fi
           fi
       - name: Lint
-        run: uvx ruff check .
+        id: lint
+        continue-on-error: ${{ github.event_name != 'pull_request' }}
+        run: uvx ruff check --output-format=github .
       - name: Test
+        id: test
+        continue-on-error: ${{ github.event_name != 'pull_request' }}
         # Exit code 5 means pytest found no tests, which is fine at this stage.
         run: uv run --with pytest pytest || [ $? -eq 5 ]
+      - name: Warn about failures
+        if: always() && (steps.lint.outcome == 'failure' || steps.test.outcome == 'failure')
+        env:
+          LINT: ${{ steps.lint.outcome }}
+          TEST: ${{ steps.test.outcome }}
+          DIR: ${{ matrix.dir }}
+        run: |
+          [ "$LINT" = "failure" ] && echo "::warning title=Lint failed::ruff found problems in $DIR"
+          [ "$TEST" = "failure" ] && echo "::warning title=Tests failed::pytest failed in $DIR"
+          true
 
   node:
     needs: discover
@@ -121,9 +137,23 @@ jobs:
       - name: Install
         run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
       - name: Lint
+        id: lint
+        continue-on-error: ${{ github.event_name != 'pull_request' }}
         run: npm run lint --if-present
       - name: Test
+        id: test
+        continue-on-error: ${{ github.event_name != 'pull_request' }}
         run: npm test --if-present
+      - name: Warn about failures
+        if: always() && (steps.lint.outcome == 'failure' || steps.test.outcome == 'failure')
+        env:
+          LINT: ${{ steps.lint.outcome }}
+          TEST: ${{ steps.test.outcome }}
+          DIR: ${{ matrix.dir }}
+        run: |
+          [ "$LINT" = "failure" ] && echo "::warning title=Lint failed::lint found problems in $DIR"
+          [ "$TEST" = "failure" ] && echo "::warning title=Tests failed::tests failed in $DIR"
+          true
       - name: Build
         run: npm run build --if-present
 

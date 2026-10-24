@@ -1,0 +1,28 @@
+# Local hooks that block a commit if it fails the linter, the tests or the secret scan.
+# Setup once per clone:
+#   uv tool install pre-commit
+#   uv sync --all-packages
+#   pre-commit install
+# Run on every file by hand: pre-commit run --all-files
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff (lint)
+        entry: uv run ruff check --force-exclude
+        language: system
+        types_or: [python, pyi]
+      - id: pytest
+        name: pytest (only when there are tests)
+        # Exit code 5 means pytest found no tests, which does not block the commit.
+        entry: >-
+          uv run --all-packages python -c
+          "import subprocess, sys; r = subprocess.call([sys.executable, '-m', 'pytest', '-q']); sys.exit(0 if r == 5 else r)"
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
