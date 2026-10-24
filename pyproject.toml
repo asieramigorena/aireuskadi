@@ -10,6 +10,8 @@ package = false
 
 [tool.uv.workspace]
 members = ["packages/*", "services/*"]
+# Node.js service, not a Python package.
+exclude = ["services/air-quality-service"]
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
