@@ -16,7 +16,7 @@
     "@deck.gl/layers": "^9.4.0",
     "@deck.gl/mapbox": "^9.4.0",
     "chart.js": "^4.6.1",
-    "maplibre-gl": "^6.15.0"
+    "maplibre-gl": "^6.16.0"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
