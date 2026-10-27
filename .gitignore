@@ -11,3 +11,5 @@ dist/
 
 # Local configuration
 .env
+
+docs/
