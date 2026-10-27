@@ -1,0 +1,17 @@
+[project]
+name = "emissions-service"
+version = "0.1.0"
+description = "AirEuskadi emissions REST API"
+requires-python = ">=3.12"
+dependencies = [
+    "aireuskadi-db",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+]
+
+[tool.uv.sources]
+aireuskadi-db = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
