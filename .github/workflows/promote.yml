@@ -1,0 +1,127 @@
+# Promote dev to pro from the pull request.
+# Put the label "promote" on a pull request from dev into pro, or comment "/promote" on it.
+# The workflow checks the pull request, publishes the images of its last commit to GHCR
+# (Watchtower on the VM pulls them) and then merges it with a merge commit.
+# If any step fails nothing is merged; remove and add the label again, or comment again, to retry.
+# A comment only triggers the version of this file that is on main, so the first promotion
+# has to use the label.
+name: Promote (pro)
+
+on:
+  pull_request:
+    types: [labeled]
+    branches: [pro]
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: promote-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+  PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+
+jobs:
+  check:
+    name: Promote · check
+    if: >-
+      (github.event_name == 'pull_request' && github.event.label.name == 'promote')
+      || (github.event_name == 'issue_comment' && github.event.issue.pull_request
+          && startsWith(github.event.comment.body, '/promote'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+    outputs:
+      sha: ${{ steps.pr.outputs.sha }}
+    steps:
+      - name: Check who asked
+        env:
+          ACTOR: ${{ github.actor }}
+        run: |
+          role=$(gh api "repos/$GH_REPO/collaborators/$ACTOR/permission" --jq .role_name)
+          case "$role" in
+            admin|maintain|write) echo "OK: $ACTOR has the $role role" ;;
+            *) echo "::error::$ACTOR needs write access to promote (has: $role)"; exit 1 ;;
+          esac
+
+      - name: Check the pull request
+        id: pr
+        run: |
+          for _ in 1 2 3 4 5; do
+            pr=$(gh pr view "$PR" --json state,baseRefName,headRefName,headRefOid,isCrossRepository,mergeable)
+            [ "$(jq -r .mergeable <<<"$pr")" != "UNKNOWN" ] && break
+            sleep 5
+          done
+          [ "$(jq -r .state <<<"$pr")" = "OPEN" ] || { echo "::error::The pull request is not open"; exit 1; }
+          [ "$(jq -r .baseRefName <<<"$pr")" = "pro" ] || { echo "::error::The pull request must target pro"; exit 1; }
+          [ "$(jq -r .headRefName <<<"$pr")" = "dev" ] || { echo "::error::Only dev can be promoted into pro"; exit 1; }
+          [ "$(jq -r .isCrossRepository <<<"$pr")" = "false" ] || { echo "::error::Pull requests from forks cannot be promoted"; exit 1; }
+          [ "$(jq -r .mergeable <<<"$pr")" = "MERGEABLE" ] || { echo "::error::The pull request cannot be merged (conflicts?)"; exit 1; }
+          sha=$(jq -r .headRefOid <<<"$pr")
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "OK: promoting $sha"
+
+      - name: Check that CI is green
+        env:
+          SHA: ${{ steps.pr.outputs.sha }}
+        run: |
+          # This workflow's own checks are left out so that a retry is not blocked by the first try.
+          runs=$(gh api "repos/$GH_REPO/commits/$SHA/check-runs?per_page=100" \
+            --jq '[.check_runs[] | select(.name | startswith("Promote") | not)]')
+          [ "$(jq length <<<"$runs")" -gt 0 ] || { echo "::error::No CI checks found for $SHA"; exit 1; }
+          pending=$(jq '[.[] | select(.status != "completed")] | length' <<<"$runs")
+          [ "$pending" -eq 0 ] || { echo "::error::CI is still running for $SHA"; exit 1; }
+          failed=$(jq -r '[.[] | select(.conclusion | IN("success", "skipped", "neutral") | not) | .name] | join(", ")' <<<"$runs")
+          [ -z "$failed" ] || { echo "::error::CI failed for $SHA: $failed"; exit 1; }
+          echo "OK: CI is green"
+
+  publish:
+    name: Promote · publish
+    needs: check
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/deploy-pro.yml
+    with:
+      ref: ${{ needs.check.outputs.sha }}
+
+  merge:
+    name: Promote · merge
+    needs: [check, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # Merges only if the pull request still has the commit whose images were published.
+      - name: Merge the pull request
+        env:
+          SHA: ${{ needs.check.outputs.sha }}
+        run: gh pr merge "$PR" --merge --match-head-commit "$SHA"
+      - name: Comment
+        env:
+          SHA: ${{ needs.check.outputs.sha }}
+        run: |
+          gh pr comment "$PR" --body "Promoted: the images of \`${SHA:0:7}\` are published as \`:pro\` and the pull request is merged."
+
+  report-failure:
+    name: Promote · report
+    needs: [check, publish, merge]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Comment and free the label
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh pr comment "$PR" --body "Promotion stopped, nothing was merged. See the [run]($RUN_URL). Fix it and remove and add the \`promote\` label again, or comment \`/promote\`."
+          gh pr edit "$PR" --remove-label promote || true

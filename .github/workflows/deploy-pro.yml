@@ -3,12 +3,20 @@
 # GitHub Container Registry as ghcr.io/<owner>/<repo>-<folder>:pro (plus a sha tag).
 # Nothing connects to the server: Watchtower on the Oracle VM pulls the new :pro
 # images and restarts the containers. With no Dockerfile yet, the run just reports it.
+# promote.yml calls this workflow with the commit of a pull request, to publish the images
+# before the pull request is merged into pro.
 name: Deploy (pro)
 
 on:
   push:
     branches: [pro]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to build; the commit that triggered the run when empty
+        type: string
+        default: ""
 
 concurrency:
   group: deploy-pro
@@ -22,6 +30,7 @@ env:
   # The Oracle Always Free VM is an Ampere (Arm) machine.
   # Set the repository variable IMAGE_PLATFORMS to e.g. linux/amd64,linux/arm64 to change it.
   PLATFORMS: ${{ vars.IMAGE_PLATFORMS || 'linux/arm64' }}
+  COMMIT: ${{ inputs.ref || github.sha }}
 
 jobs:
   discover:
@@ -30,6 +39,8 @@ jobs:
       images: ${{ steps.find.outputs.images }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.COMMIT }}
       - name: Find Dockerfiles
         id: find
         run: |
@@ -52,6 +63,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.COMMIT }}
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -72,9 +85,9 @@ jobs:
           push: true
           tags: |
             ${{ steps.name.outputs.image }}:pro
-            ${{ steps.name.outputs.image }}:sha-${{ github.sha }}
+            ${{ steps.name.outputs.image }}:sha-${{ env.COMMIT }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ env.COMMIT }}
           cache-from: type=gha,scope=${{ matrix.image.dir }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image.dir }}
