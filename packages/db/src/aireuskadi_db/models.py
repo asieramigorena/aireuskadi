@@ -97,13 +97,13 @@ class ActivitySector(Base):
 
 
 class Facility(Base):
-    """Industrial facility reporting to PRTR-Spain."""
+    """Industrial facility of the Basque E-PRTR register (Open Data Euskadi)."""
 
     __tablename__ = "facility"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     municipality_code: Mapped[str] = mapped_column(ForeignKey("municipality.ine_code"), index=True)
-    prtr_id: Mapped[str] = mapped_column(String(50), unique=True)
+    nima: Mapped[str] = mapped_column(String(20), unique=True, comment="NIMA, id in the register")
     name: Mapped[str] = mapped_column(String(300))
     activity: Mapped[str | None] = mapped_column(Text)
     geom = mapped_column(Geometry("POINT", srid=SRID))
@@ -120,7 +120,8 @@ class FacilityEmission(Base):
     year: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
     amount_kg: Mapped[Decimal] = mapped_column(Numeric(18, 3))
     method: Mapped[str | None] = mapped_column(
-        String(1), comment="PRTR method: M measured, C calculated, E estimated"
+        String(1),
+        comment="M measured, C calculated, E estimated; the Basque register does not publish it",
     )
 
     facility: Mapped[Facility] = relationship(back_populates="emissions")

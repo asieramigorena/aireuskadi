@@ -9,7 +9,7 @@ skeleton of every component exists, the application logic does not yet.
 
 ## What it shows
 
-- **Declared industrial emissions** (kg per year) of each facility, from PRTR-España.
+- **Declared industrial emissions** (kg per year) of each facility, from the Basque E-PRTR register.
 - **Measured air quality** (µg/m³) at each monitoring station, from the Open Data Euskadi network,
   compared with the WHO 2021 guidelines.
 - **Regional trend 1990-2024** by pollutant and sector, from the Basque emissions inventory.
@@ -19,7 +19,8 @@ aggregations of municipalities. Emissions and concentrations are different quant
 never summed, compared or stored in the same column.
 
 The regional inventory only gives totals for the whole Basque Country, so the per-municipality map
-uses the two sources that have a location: PRTR facilities and the air quality stations.
+uses the two sources that have a location: the facilities of the E-PRTR register and the air
+quality stations.
 Administrative boundaries come from GeoEuskadi.
 
 ## Architecture
@@ -53,11 +54,21 @@ municipality.
 
 | Source | Content | Licence |
 | --- | --- | --- |
-| [PRTR-España](https://prtr-es.miteco.gob.es/) | Emissions to air by facility and year | CC BY 4.0 |
+| [Basque E-PRTR register](https://opendata.euskadi.eus/catalogo/-/registro-de-emisiones-y-transferencias-de-contaminantes-del-2023-prtr/) (Open Data Euskadi) | Emissions to air by facility and year, with coordinates | CC BY 4.0 |
 | [Open Data Euskadi, air quality](https://opendata.euskadi.eus/) | Hourly measurements by station | CC BY 4.0 |
 | Basque emissions inventory 1990-2024 | Annual totals by pollutant and sector | CC BY 4.0 |
 | [GeoEuskadi](https://www.geo.euskadi.eus/) | Municipality, district and territory boundaries | CC BY 4.0 |
 | WHO global air quality guidelines 2021 | Reference values | |
+
+The Open Data Euskadi data is published by the Basque Government (Eusko Jaurlaritza) under
+[Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/), and its
+[legal notice](https://opendata.euskadi.eus/general/-/informacion-legal-opendata/) asks to cite the
+source, to give the date of the last update and not to alter the meaning of the data. The raw files
+are kept unchanged in `staging`.
+
+The national [PRTR-España](https://prtr-es.miteco.gob.es/) register is not used to load data. It
+has no coordinates, and the layer that has them is behind an anti-robot check. It is kept as a
+possible cross-check: its emissions files are public ZIPs per year.
 
 ## Run it locally
 
