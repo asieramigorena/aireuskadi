@@ -14,6 +14,7 @@ from aireuskadi_db.models import (
     Territory,
     WhoGuideline,
 )
+from aireuskadi_db.schema import create_all
 from aireuskadi_db.views import UNIT_INDICATOR_DDL, unit_indicator
 
 __all__ = [
@@ -31,5 +32,6 @@ __all__ = [
     "Station",
     "Territory",
     "WhoGuideline",
+    "create_all",
     "unit_indicator",
 ]

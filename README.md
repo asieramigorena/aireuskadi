@@ -71,13 +71,18 @@ docker compose up -d --wait
 # Python components
 uv sync --all-packages
 
+# Create the core schema, its tables and the unit_indicator view (safe to repeat)
+uv run --env-file .env aireuskadi-db-init
+
 # Node.js components
 (cd services/air-quality-service && npm ci)
 (cd web-client && npm ci)
 ```
 
 The database listens on `127.0.0.1:5432` and Redis on `127.0.0.1:6379`. The application services
-have no Dockerfile or compose entry yet.
+have no Dockerfile or compose entry yet. The tables are created with `create_all()` and are not
+migrated: after changing the model, recreate the database with `docker compose down -v`. The
+database test in `packages/db` only runs when `DATABASE_URL` is set.
 
 Checks that CI also runs:
 
