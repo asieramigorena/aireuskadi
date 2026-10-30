@@ -46,9 +46,10 @@ call each other. Every API is REST with OpenAPI 3.x.
 | `packages/db` | Data model shared by the Python components | SQLAlchemy 2, GeoAlchemy2 |
 | `database` | PostgreSQL image with PostGIS (amd64 and arm64) | Docker |
 
-The database has two schemas: `staging` (literal copy of what was downloaded) and `core` (the
-normalised model). `core.unit_indicator` is a materialized view with the indicators of each
-municipality.
+The database has one schema, `core`, with the normalised model. `core.unit_indicator` is a
+materialized view with the indicators of each municipality. The worker loads each file in a single
+transaction, leaves out the rows that fail validation (logging each one with its reason) and
+records every run in `core.ingestion_run`.
 
 ## Data sources
 
@@ -63,8 +64,8 @@ municipality.
 The Open Data Euskadi data is published by the Basque Government (Eusko Jaurlaritza) under
 [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/), and its
 [legal notice](https://opendata.euskadi.eus/general/-/informacion-legal-opendata/) asks to cite the
-source, to give the date of the last update and not to alter the meaning of the data. The raw files
-are kept unchanged in `staging`.
+source, to give the date of the last update and not to alter the meaning of the data. The amounts
+are loaded as published; when several rows share a facility and a pollutant, the largest is kept.
 
 The national [PRTR-España](https://prtr-es.miteco.gob.es/) register is not used to load data. It
 has no coordinates, and the layer that has them is behind an anti-robot check. It is kept as a
@@ -110,6 +111,23 @@ To block a commit that fails the linter, the tests or the secret scan, install t
 uv tool install pre-commit
 pre-commit install
 ```
+
+Optional: centralised logs. Every service writes JSON lines to standard output, and Alloy sends the
+logs of all the containers to Loki. The Grafana stack (Loki, Alloy and Grafana, in `observability/`
+and the `logging` profile of the compose) was set up assisted by Claude:
+
+```sh
+docker compose --profile logging up -d
+```
+
+Grafana is on <http://127.0.0.1:3000> (user `admin`, password `GRAFANA_ADMIN_PASSWORD` of `.env`)
+with Loki already configured. In Explore, `{service="redis"}` shows the logs of a service and
+`{service="ingestion-worker"} | json | level="WARNING"` filters by a field of the JSON lines.
+
+The folder `AirEuskadi` has two dashboards, loaded from `observability/dashboards/`: **Health**
+(errors and log volume of every container) and **Ingestion** (runs, rejected rows and errors of the
+worker; it has data once the worker runs in a container). To change one, edit its JSON file, because
+the dashboards are read-only in Grafana.
 
 ## Branches and deployment
 
