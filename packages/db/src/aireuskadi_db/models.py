@@ -9,7 +9,18 @@ from datetime import datetime
 from decimal import Decimal
 
 from geoalchemy2 import Geometry
-from sqlalchemy import CHAR, DateTime, ForeignKey, Integer, Numeric, SmallInteger, String, Text
+from sqlalchemy import (
+    CHAR,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    SmallInteger,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aireuskadi_db.base import Base
@@ -174,3 +185,29 @@ class Measurement(Base):
 
     station: Mapped[Station] = relationship(back_populates="measurements")
     pollutant: Mapped[Pollutant] = relationship()
+
+
+# Ingestion log: one row per run of the worker, for each source.
+
+
+class IngestionRun(Base):
+    __tablename__ = "ingestion_run"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('running', 'succeeded', 'failed')", name="ingestion_run_status"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source: Mapped[str] = mapped_column(String(50), index=True, comment="eprtr_air, stations...")
+    status: Mapped[str] = mapped_column(String(20), default="running")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    source_url: Mapped[str | None] = mapped_column(Text)
+    file_hash: Mapped[str | None] = mapped_column(String(64), comment="SHA-256 of the file")
+    rows_read: Mapped[int] = mapped_column(Integer, default=0, comment="rows in the file")
+    rows_loaded: Mapped[int] = mapped_column(Integer, default=0, comment="rows written to core")
+    rows_rejected: Mapped[int] = mapped_column(
+        Integer, default=0, comment="rows left out; each one is logged with its reason"
+    )
+    error: Mapped[str | None] = mapped_column(Text)
