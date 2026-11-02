@@ -86,15 +86,37 @@ uv sync --all-packages
 # Create the core schema, its tables and the unit_indicator view (safe to repeat)
 uv run --env-file .env aireuskadi-db-init
 
+# Load the data: the boundaries first, then the E-PRTR register of one year (safe to repeat)
+uv run --env-file .env python -m ingestion_worker.main boundaries
+uv run --env-file .env python -m ingestion_worker.main eprtr --year 2023
+
 # Node.js components
 (cd services/air-quality-service && npm ci)
 (cd web-client && npm ci)
 ```
 
-The database listens on `127.0.0.1:5432` and Redis on `127.0.0.1:6379`. The application services
-have no Dockerfile or compose entry yet. The tables are created with `create_all()` and are not
-migrated: after changing the model, recreate the database with `docker compose down -v`. The
-database test in `packages/db` only runs when `DATABASE_URL` is set.
+The database listens on `127.0.0.1:5432` and Redis on `127.0.0.1:6379`. The tables are created
+with `create_all()` and are not migrated: after changing the model, recreate the database with
+`docker compose down -v`. The tests that use the database only run when `DATABASE_URL` is set; they
+write rows of their own (municipality `99001`) and remove them.
+
+The worker also runs in a container, which is the way its logs reach Loki and Grafana. Run these
+from the root of the repository:
+
+```sh
+docker compose run --rm ingestion-worker boundaries
+docker compose run --rm ingestion-worker eprtr --year 2023
+```
+
+It has a Dockerfile, `services/ingestion-worker/worker.Dockerfile`, built with the root of the
+repository as context, and a compose entry in the profile `worker`, so `docker compose up` does not
+start it. After a run the container stays up for `LOG_LINGER_SECONDS` seconds (20 by default) so
+that Alloy has time to read its logs; set it to 0 if you do not use the logging profile. The other
+application services have no Dockerfile yet, and `deploy-pro.yml` does not build this one.
+
+Every run is recorded in `core.ingestion_run`, with the rows read, loaded and rejected, the hash of
+the file and, for the E-PRTR register, the date of the last update that its catalog gives. Each
+rejected row is logged with its line and the reason.
 
 Checks that CI also runs:
 
@@ -126,7 +148,7 @@ with Loki already configured. In Explore, `{service="redis"}` shows the logs of 
 
 The folder `AirEuskadi` has two dashboards, loaded from `observability/dashboards/`: **Health**
 (errors and log volume of every container) and **Ingestion** (runs, rejected rows and errors of the
-worker; it has data once the worker runs in a container). To change one, edit its JSON file, because
+worker; it has data when the worker runs in a container, as above). To change one, edit its JSON file, because
 the dashboards are read-only in Grafana.
 
 ## Branches and deployment
@@ -143,10 +165,11 @@ pull request and CI, publishes the images of its last commit and merges it.
 
 ## Status
 
-The work is tracked in the issues. Done so far: the Python workspace and the data model, empty
-FastAPI and Fastify apps, an empty web client, the local database and Redis, and the CI and
-deployment workflows. Next: create the tables, load one data source and expose it through the
-APIs and the map.
+The work is tracked in the issues. Done so far: the Python workspace and the data model, the local
+database and Redis, the CI and deployment workflows, and the ingestion worker for the boundaries and
+the E-PRTR register. Still empty: the FastAPI and Fastify apps and the web client. Next: the other
+sources of the worker (air quality measurements and the emissions inventory), and then expose the
+data through the APIs and the map.
 
 ## Licence
 
