@@ -9,6 +9,9 @@ dependencies = [
     "psycopg[binary]>=3.2",
 ]
 
+[project.scripts]
+aireuskadi-db-init = "aireuskadi_db.schema:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

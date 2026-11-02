@@ -11,5 +11,6 @@ dist/
 
 # Local configuration
 .env
+docker-compose.override.yml
 
 docs/

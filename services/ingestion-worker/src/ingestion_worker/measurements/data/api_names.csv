@@ -1,0 +1,18 @@
+api_name,pollutant_code,averaging_period
+Benceno,BENZENE,1h
+CO,CO,1h
+CO 8h,CO,8h
+Etilbenceno,ETHYLBENZENE,1h
+M-P-XILENO,M_P_XYLENE,1h
+NH3,NH3,1h
+NO,NO,1h
+NO2,NO2,1h
+NOX,NOX,1h
+O3,O3,1h
+O3 8h,O3,8h
+Ortoxileno,O_XYLENE,1h
+PM10,PM10,1h
+"PM2,5",PM25,1h
+SH2,H2S,1h
+SO2,SO2,1h
+Tolueno,TOLUENE,1h

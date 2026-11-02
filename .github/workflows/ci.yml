@@ -37,7 +37,7 @@ jobs:
         run: |
           case "$BASE" in
             pro)  [ "$HEAD" = "dev" ] || { echo "::error::Only dev can be merged into pro (got $HEAD)"; exit 1; } ;;
-            main) [ "$HEAD" = "pro" ] || { echo "::error::Only pro can be merged into main (got $HEAD)"; exit 1; } ;;
+            main) [ "$HEAD" = "pro" ] || [ "$HEAD" = "dev" ] || { echo "::error::Only pro or dev can be merged into main (got $HEAD)"; exit 1; } ;;
           esac
           echo "OK: $HEAD -> $BASE"
 

@@ -1,0 +1,14 @@
+# The worker image is built with the repository root as context: keep out what it does not need,
+# and above all the local secrets.
+.git
+.env
+.venv
+**/node_modules
+**/__pycache__
+.pytest_cache
+.ruff_cache
+docs
+web-client
+observability
+database
+services/air-quality-service

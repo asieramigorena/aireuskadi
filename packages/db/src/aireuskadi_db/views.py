@@ -3,8 +3,9 @@
 For each municipality, pollutant and year:
 - declared_t: emissions declared by the facilities in the municipality (t/year)
 - t_km2: declared_t divided by the municipality area
-- who_ratio: mean annual concentration measured by its stations divided by the
-  WHO annual guideline (latest edition); null when there is no station or guideline
+- who_ratio: mean annual concentration measured by its stations, in ug/m3, divided by the
+  WHO annual guideline (latest edition, always in ug/m3); null when there is no station or
+  guideline
 
 The worker refreshes it after each load (REFRESH MATERIALIZED VIEW CONCURRENTLY).
 """
@@ -23,11 +24,20 @@ WITH declared AS (
     GROUP BY f.municipality_code, fe.pollutant_code, fe.year
 ),
 measured AS (
+    -- Every value is converted to ug/m3 with its own unit. Only the hourly values make the
+    -- annual mean (the 8-hour mean of CO and O3 would count the same hours again), and a value
+    -- in a unit that is not known is left out instead of guessed.
     SELECT s.municipality_code, m.pollutant_code,
            EXTRACT(YEAR FROM m.ts AT TIME ZONE 'UTC')::smallint AS year,
-           AVG(m.value) AS mean_ugm3
+           AVG(m.value * CASE m.unit
+                   WHEN 'µg/m3' THEN 1
+                   WHEN 'mg/m3' THEN 1000
+                   WHEN 'ng/m3' THEN 0.001
+               END) AS mean_ugm3
     FROM {SCHEMA}.measurement m
     JOIN {SCHEMA}.station s ON s.id = m.station_id
+    WHERE m.averaging_period = '1h'
+      AND m.unit IN ('µg/m3', 'mg/m3', 'ng/m3')
     GROUP BY s.municipality_code, m.pollutant_code, 3
 ),
 guideline AS (
