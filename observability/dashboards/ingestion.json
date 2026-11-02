@@ -62,7 +62,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({service=\"$service\"} | json | message=\"run finished\" [$__range]))",
+          "expr": "sum(count_over_time({service=\"$service\"} | json | __error__=\"\" | message=\"run finished\" [$__range]))",
           "queryType": "instant",
           "refId": "A"
         }
@@ -118,7 +118,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({service=\"$service\"} | json | message=\"run failed\" [$__range]))",
+          "expr": "sum(count_over_time({service=\"$service\"} | json | __error__=\"\" | message=\"run failed\" [$__range]))",
           "queryType": "instant",
           "refId": "A"
         }
@@ -178,7 +178,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({service=\"$service\"} | json | message=\"row rejected\" [$__range]))",
+          "expr": "sum(count_over_time({service=\"$service\"} | json | __error__=\"\" | message=\"row rejected\" [$__range]))",
           "queryType": "instant",
           "refId": "A"
         }
@@ -234,7 +234,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({service=\"$service\"} | json | level=~\"ERROR|CRITICAL\" [$__range]))",
+          "expr": "sum(count_over_time({service=\"$service\"} | json | __error__=\"\" | level=~\"ERROR|CRITICAL\" [$__range]))",
           "queryType": "instant",
           "refId": "A"
         }
@@ -294,7 +294,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum by (source) (count_over_time({service=\"$service\"} | json | message=\"row rejected\" [$__interval]))",
+          "expr": "sum by (source) (count_over_time({service=\"$service\"} | json | __error__=\"\" | message=\"row rejected\" [$__interval]))",
           "queryType": "range",
           "refId": "A",
           "legendFormat": "{{source}}"
@@ -342,7 +342,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum by (level) (count_over_time({service=\"$service\"} | json[$__interval]))",
+          "expr": "sum by (level) (count_over_time({service=\"$service\"} | json | __error__=\"\" [$__interval]))",
           "queryType": "range",
           "refId": "A",
           "legendFormat": "{{level}}"
@@ -390,7 +390,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "{service=\"$service\"} | json | message=\"row rejected\" | line_format \"{{.source}} row {{.row_number}} ({{.nima}}): {{.reason}}\"",
+          "expr": "{service=\"$service\"} | json | __error__=\"\" | message=\"row rejected\" | line_format \"{{.source}} row {{.row_number}} ({{.nima}}): {{.reason}}\"",
           "queryType": "range",
           "refId": "A"
         }
@@ -425,7 +425,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "{service=\"$service\"} | json | message=~\"run .*\" | line_format \"{{.message}} {{.source}} {{.rows_read}} {{.rows_loaded}} {{.rows_rejected}}\"",
+          "expr": "{service=\"$service\"} | json | __error__=\"\" | message=~\"run .*\" | line_format \"{{.message}} {{.source}} {{.rows_read}} {{.rows_loaded}} {{.rows_rejected}}\"",
           "queryType": "range",
           "refId": "A"
         }
@@ -460,7 +460,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "{service=\"$service\"} | json | level=~\"ERROR|CRITICAL\" | line_format \"{{.message}} {{.exception}}\"",
+          "expr": "{service=\"$service\"} | json | __error__=\"\" | level=~\"ERROR|CRITICAL\" | line_format \"{{.message}} {{.exception}}\"",
           "queryType": "range",
           "refId": "A"
         }

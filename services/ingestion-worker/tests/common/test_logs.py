@@ -1,6 +1,7 @@
 import io
 import json
 import logging
+import sys
 from decimal import Decimal
 
 import pytest
@@ -77,3 +78,35 @@ def test_the_level_comes_from_log_level(monkeypatch):
         assert root.level == logging.INFO
     finally:
         root.handlers[:], root.level = handlers, level
+
+
+def crash(monkeypatch, capsys, exception):
+    """What the standard output holds after `exception` goes uncaught, once logging is set up."""
+    root = logging.getLogger()
+    handlers, level = root.handlers[:], root.level
+    monkeypatch.setattr(sys, "excepthook", sys.excepthook)  # put back when the test ends
+    try:
+        configure_logging()
+        try:
+            raise exception
+        except BaseException:  # noqa: BLE001 - this is what the interpreter does with it
+            sys.excepthook(*sys.exc_info())
+        return capsys.readouterr().out
+    finally:
+        root.handlers[:], root.level = handlers, level
+
+
+def test_a_crash_is_one_json_line_with_its_traceback_not_a_dozen_lines_of_plain_text(
+    monkeypatch, capsys
+):
+    out = crash(monkeypatch, capsys, RuntimeError("the server is down"))
+
+    (line,) = out.splitlines()
+    entry = json.loads(line)
+    assert (entry["level"], entry["message"]) == ("CRITICAL", "uncaught exception")
+    assert "Traceback" in entry["exception"]
+    assert "RuntimeError: the server is down" in entry["exception"]
+
+
+def test_stopping_the_program_with_ctrl_c_is_not_logged_as_a_critical_failure(monkeypatch, capsys):
+    assert crash(monkeypatch, capsys, KeyboardInterrupt()) == ""

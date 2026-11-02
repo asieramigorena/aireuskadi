@@ -37,9 +37,21 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(entry, ensure_ascii=False, default=str)
 
 
+def _log_uncaught(exc_type, exc, traceback) -> None:
+    """A crash as one JSON line, with the traceback inside it, instead of the lines of plain text
+    that Python prints, which the log searches cannot read as JSON."""
+    if issubclass(exc_type, KeyboardInterrupt):  # stopped by hand: nothing failed
+        sys.__excepthook__(exc_type, exc, traceback)
+        return
+    logging.getLogger("ingestion_worker").critical(
+        "uncaught exception", exc_info=(exc_type, exc, traceback)
+    )
+
+
 def configure_logging() -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
+    sys.excepthook = _log_uncaught
