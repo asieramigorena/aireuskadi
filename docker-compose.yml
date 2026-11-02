@@ -3,6 +3,9 @@
 # The application services are added here as they get their Dockerfile.
 # Centralised logs (Loki, Alloy, Grafana) only start with the profile `logging`:
 #   docker compose --profile logging up -d
+# The ingestion worker runs on demand, not with `up`:
+#   docker compose run --rm ingestion-worker boundaries
+#   docker compose run --rm ingestion-worker eprtr --year 2023
 services:
   postgres:
     build: ./database
@@ -32,6 +35,22 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+
+  # Ingestion worker. Inside a container its logs reach Loki (see the logging profile).
+  # Load the boundaries before the E-PRTR register.
+  ingestion-worker:
+    build:
+      context: .
+      dockerfile: services/ingestion-worker/worker.Dockerfile
+    profiles: [worker]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # Seconds the container stays up after a run so that Alloy reads its logs (see
+      # entrypoint.sh). Only useful with the logging profile; use 0 to not wait.
+      LOG_LINGER_SECONDS: ${LOG_LINGER_SECONDS:-20}
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   # Centralised logs. Alloy reads the logs of every container and sends them to Loki;
   # Grafana searches them. Grafana is published on localhost only.
