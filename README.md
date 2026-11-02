@@ -86,9 +86,11 @@ uv sync --all-packages
 # Create the core schema, its tables and the unit_indicator view (safe to repeat)
 uv run --env-file .env aireuskadi-db-init
 
-# Load the data: the boundaries first, then the E-PRTR register of one year (safe to repeat)
+# Load the data: the boundaries first, then the E-PRTR register of one year and the last hours
+# of air quality measurements (all safe to repeat)
 uv run --env-file .env python -m ingestion_worker.main boundaries
 uv run --env-file .env python -m ingestion_worker.main eprtr --year 2023
+uv run --env-file .env python -m ingestion_worker.main measurements --hours 48
 
 # Node.js components
 (cd services/air-quality-service && npm ci)
@@ -106,6 +108,7 @@ from the root of the repository:
 ```sh
 docker compose run --rm ingestion-worker boundaries
 docker compose run --rm ingestion-worker eprtr --year 2023
+docker compose run --rm ingestion-worker measurements
 ```
 
 It has a Dockerfile, `services/ingestion-worker/worker.Dockerfile`, built with the root of the
@@ -116,7 +119,13 @@ application services have no Dockerfile yet, and `deploy-pro.yml` does not build
 
 Every run is recorded in `core.ingestion_run`, with the rows read, loaded and rejected, the hash of
 the file and, for the E-PRTR register, the date of the last update that its catalog gives. Each
-rejected row is logged with its line and the reason.
+rejected row is logged with its line and the reason. A run loads in one transaction: if it fails,
+nothing of it stays.
+
+The worker (`services/ingestion-worker/src/ingestion_worker`) is organised by data source and by
+general use: `boundaries/`, `eprtr/` and `measurements/` have one folder each, with the code that
+reads the source, locates or checks it, loads it into `core` and runs the whole load; `common/` has
+what every load shares (download, logs, the record of each run). The tests follow the same folders.
 
 Checks that CI also runs:
 
@@ -166,10 +175,10 @@ pull request and CI, publishes the images of its last commit and merges it.
 ## Status
 
 The work is tracked in the issues. Done so far: the Python workspace and the data model, the local
-database and Redis, the CI and deployment workflows, and the ingestion worker for the boundaries and
-the E-PRTR register. Still empty: the FastAPI and Fastify apps and the web client. Next: the other
-sources of the worker (air quality measurements and the emissions inventory), and then expose the
-data through the APIs and the map.
+database and Redis, the CI and deployment workflows, and the ingestion worker for the boundaries, the
+E-PRTR register and the air quality measurements. Still empty: the FastAPI and Fastify apps and the
+web client. Next: the emissions inventory and a schedule for the worker (the loads are launched by
+hand today), and then expose the data through the APIs and the map.
 
 ## Licence
 
