@@ -3,6 +3,7 @@
     python -m ingestion_worker.main boundaries
     python -m ingestion_worker.main eprtr --year 2023
     python -m ingestion_worker.main measurements [--hours 48]
+    python -m ingestion_worker.main schedule [--once]
 
 The boundaries must be loaded first: the E-PRTR facilities and the stations are located on them.
 """
@@ -18,7 +19,9 @@ from ingestion_worker.boundaries.run import run_boundaries
 from ingestion_worker.common.download import download
 from ingestion_worker.common.logs import configure_logging
 from ingestion_worker.eprtr.run import run_eprtr
+from ingestion_worker.jobs import default_jobs
 from ingestion_worker.measurements.run import run_measurements
+from ingestion_worker.scheduler import run_scheduler
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +43,13 @@ def main(
     measurements.add_argument(
         "--hours", type=int, default=48, help="how many hours back to read (default 48)"
     )
+    schedule = commands.add_parser(
+        "schedule",
+        help="run the loads when they are due (measurements every hour, the rest monthly)",
+    )
+    schedule.add_argument(
+        "--once", action="store_true", help="one pass, for a cron, instead of running for ever"
+    )
     args = parser.parse_args(argv)
 
     if engine is None:
@@ -54,8 +64,10 @@ def main(
         run_boundaries(engine, fetch=fetch)
     elif args.command == "eprtr":
         run_eprtr(engine, args.year, fetch=fetch)
-    else:
+    elif args.command == "measurements":
         run_measurements(engine, hours=args.hours, fetch=fetch)
+    else:
+        run_scheduler(engine, default_jobs(engine, fetch=fetch), once=args.once)
     log.info("worker finished", extra={"command": args.command})
 
 

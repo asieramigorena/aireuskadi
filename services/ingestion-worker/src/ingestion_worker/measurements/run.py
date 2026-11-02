@@ -1,6 +1,7 @@
 """One run of the measurements loader: the stations and the last hours of the three provinces."""
 
 import hashlib
+import math
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
@@ -20,12 +21,23 @@ API = "https://api.euskadi.eus/air-quality"
 COUNTIES = ("01", "20", "48")  # Araba/Álava, Gipuzkoa, Bizkaia: one request each
 HOURLY = API + "/measurements/hourly/counties/{county}/from/{start}/to/{end}"
 MINUTE = "%Y-%m-%dT%H:%M"  # with seconds or a Z the API answers 400
+DEFAULT_HOURS = 48
+MAX_HOURS = 168  # a week
+
+
+def measurements_hours(now: datetime, last_success: datetime | None) -> int:
+    """How many hours back to read: 48, or more to cover the gap if the worker was stopped (the
+    values of the stopped hours would be lost otherwise), up to a week."""
+    if last_success is None:
+        return DEFAULT_HOURS
+    gap = math.ceil((now - last_success).total_seconds() / 3600) + 3
+    return min(max(DEFAULT_HOURS, gap), MAX_HOURS)
 
 
 def run_measurements(
     engine: Engine,
     now: datetime | None = None,
-    hours: int = 48,
+    hours: int = DEFAULT_HOURS,
     fetch: Callable[[str], bytes] = download,
 ) -> None:
     """Loads the stations and the last `hours` hours, which are read again in every run: the
