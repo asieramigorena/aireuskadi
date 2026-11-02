@@ -5,7 +5,7 @@ import os
 import geopandas as gpd
 import pytest
 from aireuskadi_db import IngestionRun, create_all
-from ingestion_worker.boundaries import (
+from ingestion_worker.boundaries.layers import (
     district_records,
     load_boundaries,
     municipality_records,
@@ -70,6 +70,13 @@ def engine():
             )
         )
         conn.execute(text("DELETE FROM core.facility WHERE nima LIKE 'T0000000%'"))
+        conn.execute(
+            text(
+                "DELETE FROM core.measurement WHERE station_id IN "
+                "(SELECT id FROM core.station WHERE code LIKE 'T-%')"
+            )
+        )
+        conn.execute(text("DELETE FROM core.station WHERE code LIKE 'T-%'"))
         conn.execute(text("DELETE FROM core.municipality WHERE ine_code = '99001'"))
         conn.execute(text("DELETE FROM core.district WHERE code = '9901'"))
         conn.execute(text("DELETE FROM core.territory WHERE code = '99'"))

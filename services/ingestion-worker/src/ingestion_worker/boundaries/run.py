@@ -9,15 +9,15 @@ from aireuskadi_db import IngestionRun
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
-from ingestion_worker.boundaries import (
+from ingestion_worker.boundaries.layers import (
     district_records,
     load_boundaries,
     municipality_records,
     select_municipalities,
     territory_records,
 )
-from ingestion_worker.download import download
-from ingestion_worker.runs import track_run
+from ingestion_worker.common.download import download
+from ingestion_worker.common.runs import track_run
 
 SOURCE = "boundaries"
 URL = "https://www.geo.euskadi.eus/cartografia/DatosDescarga/Limites/{layer}_5000_ETRS89.zip"

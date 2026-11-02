@@ -1,11 +1,14 @@
 """The command line of the worker. Skipped without DATABASE_URL (see conftest.py)."""
 
+import re
+from datetime import datetime, timedelta
+
 from aireuskadi_db import IngestionRun
+from fakes import FILE, fake_fetch
+from fakes import fetch as boundaries_fetch
 from ingestion_worker.main import main
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from test_run_boundaries_db import fetch as boundaries_fetch
-from test_run_eprtr_db import FILE
 
 
 def last_run(engine):
@@ -30,3 +33,21 @@ def test_the_boundaries_command_loads_the_boundaries(engine):
     main(["boundaries"], engine=engine, fetch=boundaries_fetch)
 
     assert last_run(engine).source == "boundaries"
+
+
+def test_the_measurements_command_loads_the_stations_and_the_values(engine, boundaries):
+    main(["measurements"], engine=engine, fetch=fake_fetch())
+
+    assert last_run(engine).source == "measurements"
+
+
+def test_the_hours_option_sets_how_far_back_the_values_are_read(engine, boundaries):
+    requested = []
+
+    main(["measurements", "--hours", "6"], engine=engine, fetch=fake_fetch(requested))
+
+    start, end = (
+        datetime.strptime(part, "%Y-%m-%dT%H:%M")
+        for part in re.search(r"/from/(.+)/to/(.+)", requested[1]).groups()
+    )
+    assert timedelta(hours=6) <= end - start < timedelta(hours=7)  # from the hour, 6 h back

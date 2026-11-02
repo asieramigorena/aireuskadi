@@ -2,7 +2,7 @@
 
 import pytest
 from conftest import layers
-from ingestion_worker.boundaries import load_boundaries, read_municipalities
+from ingestion_worker.boundaries.layers import load_boundaries, read_municipalities
 
 
 def test_municipalities_come_back_in_metres_so_that_points_in_metres_can_be_located(session):

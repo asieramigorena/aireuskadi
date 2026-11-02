@@ -4,7 +4,7 @@ import logging
 from decimal import Decimal
 
 import pytest
-from ingestion_worker.logs import JsonFormatter, configure_logging
+from ingestion_worker.common.logs import JsonFormatter, configure_logging
 
 
 @pytest.fixture

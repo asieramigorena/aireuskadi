@@ -1,6 +1,6 @@
 from datetime import date
 
-from ingestion_worker.catalog import catalog_updated_at
+from ingestion_worker.eprtr.catalog import catalog_updated_at
 
 # What the catalog page of Open Data Euskadi shows, reduced: the creation date comes first.
 PAGE = (

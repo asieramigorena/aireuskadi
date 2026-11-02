@@ -1,5 +1,5 @@
 import pytest
-from ingestion_worker.eprtr import parse_rows
+from ingestion_worker.eprtr.parse import parse_rows
 
 # Header of the real file (aire_eprtr.csv, 2023 edition).
 HEADER = (
@@ -105,7 +105,7 @@ def test_a_file_without_a_required_column_is_refused_naming_the_column():
 
 
 def test_every_rejected_row_is_logged_as_a_warning_with_its_reason(caplog):
-    with caplog.at_level("WARNING", logger="ingestion_worker.eprtr"):
+    with caplog.at_level("WARNING", logger="ingestion_worker.eprtr.parse"):
         parse_rows(csv_text(row(nima="0100000001", x="0.0", y="0.0"), row(nima="0100000002")))
 
     (record,) = caplog.records
@@ -177,7 +177,7 @@ def test_every_row_is_either_accepted_or_rejected_so_the_counts_add_up():
 
 
 def test_a_repeated_row_that_is_left_out_is_rejected_with_its_line_and_logged(caplog):
-    with caplog.at_level("WARNING", logger="ingestion_worker.eprtr"):
+    with caplog.at_level("WARNING", logger="ingestion_worker.eprtr.parse"):
         result = parse_rows(
             csv_text(
                 row(nima="0100000001", pollutant="030402", amount="100.0"),  # line 2: left out

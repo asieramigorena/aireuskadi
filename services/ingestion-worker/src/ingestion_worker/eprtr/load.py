@@ -9,8 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from ingestion_worker.eprtr import RejectedRow
-from ingestion_worker.locate import LocatedEmission
+from ingestion_worker.eprtr.locate import LocatedEmission
+from ingestion_worker.eprtr.parse import RejectedRow
 
 log = logging.getLogger(__name__)
 

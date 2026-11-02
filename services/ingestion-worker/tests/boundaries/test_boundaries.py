@@ -1,5 +1,5 @@
 import geopandas as gpd
-from ingestion_worker.boundaries import (
+from ingestion_worker.boundaries.layers import (
     district_records,
     municipality_records,
     select_municipalities,

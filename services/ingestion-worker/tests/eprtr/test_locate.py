@@ -1,7 +1,7 @@
 import geopandas as gpd
 import pytest
-from ingestion_worker.eprtr import Emission
-from ingestion_worker.locate import locate
+from ingestion_worker.eprtr.locate import locate
+from ingestion_worker.eprtr.parse import Emission
 from shapely.geometry import box
 
 # Two neighbouring squares in EPSG:25830 metres. They stand for two municipalities.
@@ -35,7 +35,7 @@ def test_an_emission_outside_every_municipality_is_rejected_logged_and_the_other
     inside = emission(nima="0100000001", row_number=2)
     far_north = emission(nima="0100000002", y=4_700_000.0 + 255_000.0, row_number=3)  # bad Y
 
-    with caplog.at_level("WARNING", logger="ingestion_worker.locate"):
+    with caplog.at_level("WARNING", logger="ingestion_worker.eprtr.locate"):
         result = locate([inside, far_north], MUNICIPALITIES)
 
     assert [e.emission.nima for e in result.located] == ["0100000001"]

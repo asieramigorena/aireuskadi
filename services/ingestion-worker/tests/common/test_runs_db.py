@@ -4,9 +4,9 @@ The Grafana dashboard "Ingestion" counts these messages: "run finished" and "run
 """
 
 import pytest
-from ingestion_worker.runs import track_run
+from ingestion_worker.common.runs import track_run
 
-LOGGER = "ingestion_worker.runs"
+LOGGER = "ingestion_worker.common.runs"
 
 
 def records(caplog, message):

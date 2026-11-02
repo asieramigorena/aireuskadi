@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 import geopandas as gpd
 
-from ingestion_worker.eprtr import Emission, RejectedRow
+from ingestion_worker.eprtr.parse import Emission, RejectedRow
 
 log = logging.getLogger(__name__)
 

@@ -9,35 +9,10 @@ from datetime import date
 
 import pytest
 from aireuskadi_db import IngestionRun
-from ingestion_worker.run_eprtr import run_eprtr
+from fakes import FILE, HEADER, csv_row
+from ingestion_worker.eprtr.run import run_eprtr
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
-
-HEADER = (
-    "Año declaración;Datos del año;CIF/DNI;Razón Social/Nombre;NIMA;Denominación Centro;"
-    "Provincia;Municipio;30-UTM30;XETRS89;YETRS89;CNAE 2009;Medio receptor;Contaminante;"
-    "Descripción;Cantidad (Kg/año);Cantidad accidental (Kg/año)"
-)
-
-
-def csv_row(nima, x, y, pollutant, amount):
-    return (
-        f"2024;2023;X;Someone;{nima};FACTORY {nima};Araba/Álava;Town;30 - UTM30;{x};{y};"
-        f"0146 - Pigs;Aire;{pollutant};D;{amount};"
-    )
-
-
-# The test municipality is the square X 495000-505000, Y 4700000-4710000 (EPSG:25830).
-FILE = "\r\n".join(
-    [
-        HEADER,
-        csv_row("T000000001", "500000.0", "4705000.0", "030402", "5000.0"),  # loaded
-        csv_row("T000000002", "0.0", "0.0", "030402", "1.0"),  # coordinates 0,0
-        csv_row("T000000003", "500000.0", "4900000.0", "030402", "1.0"),  # outside
-        csv_row("T000000004", "500000.0", "4705000.0", "999999", "1.0"),  # unknown pollutant
-    ]
-).encode("utf-8-sig")
-
 
 CATALOG_URL = (
     "https://opendata.euskadi.eus/catalogo/-/"
@@ -131,7 +106,7 @@ def test_if_the_catalog_page_cannot_be_read_the_run_still_succeeds_without_the_d
             raise RuntimeError("the catalog is down")
         return FILE
 
-    with caplog.at_level("WARNING", logger="ingestion_worker.run_eprtr"):
+    with caplog.at_level("WARNING", logger="ingestion_worker.eprtr.run"):
         run_eprtr(engine, 2023, fetch=fetch)
 
     run = last_run(engine)

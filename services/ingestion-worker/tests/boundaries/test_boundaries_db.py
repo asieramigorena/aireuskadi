@@ -6,7 +6,7 @@ Every test works inside a transaction that is rolled back, so no row stays in th
 import pytest
 from aireuskadi_db import Municipality
 from conftest import layers
-from ingestion_worker.boundaries import load_boundaries
+from ingestion_worker.boundaries.layers import load_boundaries
 from sqlalchemy import func, select
 
 

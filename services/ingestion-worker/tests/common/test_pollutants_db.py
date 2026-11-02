@@ -1,7 +1,7 @@
 """seed_pollutants against a real PostgreSQL. Skipped without DATABASE_URL (see conftest.py)."""
 
 from aireuskadi_db import Pollutant
-from ingestion_worker.pollutants import seed_pollutants
+from ingestion_worker.common.pollutants import seed_pollutants
 from sqlalchemy import func, select
 
 
@@ -24,3 +24,15 @@ def test_seeding_twice_does_not_duplicate_the_pollutants(session):
     seed_pollutants(session)
 
     assert session.scalar(select(func.count()).select_from(Pollutant)) == first
+
+
+def test_pollutants_that_are_only_measured_are_seeded_without_an_eprtr_code(session):
+    seed_pollutants(session)
+
+    for code, name in [
+        ("NO2", "Nitrogen dioxide"),
+        ("PM25", "Particulate matter PM2.5"),
+        ("O3", "Ozone"),
+    ]:
+        pollutant = session.get(Pollutant, code)
+        assert (pollutant.name, pollutant.eprtr_code) == (name, None)

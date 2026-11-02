@@ -6,17 +6,18 @@ from collections.abc import Callable
 from datetime import date
 
 from aireuskadi_db import IngestionRun
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
-from ingestion_worker.boundaries import read_municipalities
-from ingestion_worker.catalog import catalog_updated_at
-from ingestion_worker.download import download
-from ingestion_worker.eprtr import parse_rows
-from ingestion_worker.load_eprtr import load_emissions
-from ingestion_worker.locate import locate
-from ingestion_worker.pollutants import seed_pollutants
-from ingestion_worker.runs import track_run
+from ingestion_worker.boundaries.layers import read_municipalities
+from ingestion_worker.common.download import download
+from ingestion_worker.common.pollutants import seed_pollutants
+from ingestion_worker.common.runs import track_run
+from ingestion_worker.common.view import refresh_unit_indicator
+from ingestion_worker.eprtr.catalog import catalog_updated_at
+from ingestion_worker.eprtr.load import load_emissions
+from ingestion_worker.eprtr.locate import locate
+from ingestion_worker.eprtr.parse import parse_rows
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +63,4 @@ def run_eprtr(engine: Engine, year: int, fetch: Callable[[str], bytes] = downloa
 
     track_run(engine, SOURCE, url, work)
 
-    # CONCURRENTLY cannot run inside a transaction block, so it goes after the commit.
-    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        conn.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY core.unit_indicator"))
+    refresh_unit_indicator(engine)

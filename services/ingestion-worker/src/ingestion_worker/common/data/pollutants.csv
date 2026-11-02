@@ -38,3 +38,13 @@ eprtr_code,code,name,group
 070102,N2O,Nitrous oxide,greenhouse gas
 070103,HFC,Hydrofluorocarbons (HFCs),greenhouse gas
 070105,CH4,Methane,greenhouse gas
+,NO,Nitrogen monoxide,inorganic gas
+,NO2,Nitrogen dioxide,inorganic gas
+,O3,Ozone,inorganic gas
+,SO2,Sulphur dioxide,inorganic gas
+,H2S,Hydrogen sulphide,inorganic gas
+,PM25,Particulate matter PM2.5,particulate matter
+,TOLUENE,Toluene,organic
+,ETHYLBENZENE,Ethylbenzene,organic
+,M_P_XYLENE,m- and p-xylene,organic
+,O_XYLENE,o-xylene,organic
