@@ -20,6 +20,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -94,18 +95,27 @@ class WhoGuideline(Base):
         String(20), primary_key=True, comment="annual, 24h, 8h, 1h..."
     )
     edition: Mapped[int] = mapped_column(SmallInteger, primary_key=True, comment="e.g. 2021")
-    value_ugm3: Mapped[Decimal] = mapped_column(Numeric(10, 3))
+    value_ugm3: Mapped[Decimal] = mapped_column(
+        Numeric(10, 3),
+        comment="always in ug/m3: a guideline published in mg/m3 (CO) is converted when loaded",
+    )
 
 
 class ActivitySector(Base):
-    """What emits: road transport, industry, energy... (SNAP / NFR)."""
+    """What emits: road transport, industry, energy... (SNAP / NFR).
+
+    The code is unique within its classification, not across them: SNAP sector 1 and NFR
+    sector 1 are different sectors. NFR is hierarchical, so a sector can have a parent.
+    """
 
     __tablename__ = "activity_sector"
+    __table_args__ = (UniqueConstraint("classification", "code", name="activity_sector_code"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    code: Mapped[str] = mapped_column(String(20), unique=True, comment="SNAP or NFR code")
+    code: Mapped[str] = mapped_column(String(20), comment="SNAP or NFR code")
     classification: Mapped[str] = mapped_column(String(10), comment="SNAP or NFR")
     name: Mapped[str] = mapped_column(String(200))
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("activity_sector.id"), index=True)
 
 
 # Emissions (mass per year).
@@ -170,6 +180,9 @@ class Station(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     municipality_code: Mapped[str] = mapped_column(ForeignKey("municipality.ine_code"), index=True)
+    code: Mapped[str] = mapped_column(
+        String(20), unique=True, comment="id of the station in the air quality network"
+    )
     name: Mapped[str] = mapped_column(String(200))
     area_type: Mapped[str | None] = mapped_column(String(50), comment="urban, suburban, rural...")
     geom = mapped_column(Geometry("POINT", srid=SRID))
@@ -179,13 +192,20 @@ class Station(Base):
 
 
 class Measurement(Base):
+    """A measured concentration. The unit is stored with each value, as the source publishes it
+    (CO in mg/m3, the others in µg/m3), and the averaging period is part of the key: the network
+    gives the hourly value of CO and O3 and also their 8-hour running mean."""
+
     __tablename__ = "measurement"
 
     station_id: Mapped[int] = mapped_column(ForeignKey("station.id"), primary_key=True)
     pollutant_code: Mapped[str] = mapped_column(ForeignKey("pollutant.code"), primary_key=True)
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True, comment="UTC")
+    averaging_period: Mapped[str] = mapped_column(
+        String(10), primary_key=True, comment="1h: the hourly value; 8h: running mean of 8 hours"
+    )
     value: Mapped[Decimal] = mapped_column(Numeric(12, 3))
-    unit: Mapped[str] = mapped_column(String(20), default="µg/m3")
+    unit: Mapped[str] = mapped_column(String(20), comment="as published: µg/m3, mg/m3...")
 
     station: Mapped[Station] = relationship(back_populates="measurements")
     pollutant: Mapped[Pollutant] = relationship()
