@@ -159,7 +159,7 @@ the dashboards are read-only in Grafana.
   (Watchtower) restarts the containers. Nothing connects to the server.
 - `main`: releases. Each merge creates the next version tag and a GitHub release.
 
-Only `dev` can be merged into `pro`, and only `pro` into `main`. A pull request from `dev` into
+Only `dev` can be merged into `pro`, and both `pro` and `dev` into `main`. A pull request from `dev` into
 `pro` is promoted by adding the label `promote` or commenting `/promote`: the workflow checks the
 pull request and CI, publishes the images of its last commit and merges it.
 
