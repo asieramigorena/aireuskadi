@@ -5,13 +5,14 @@ inventory) and concentrations (µg/m3, measured by stations) are kept separate.
 Geometries use WGS 84 (EPSG:4326).
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from geoalchemy2 import Geometry
 from sqlalchemy import (
     CHAR,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -78,6 +79,9 @@ class Pollutant(Base):
     code: Mapped[str] = mapped_column(String(20), primary_key=True, comment="NOX, NO2, PM10...")
     name: Mapped[str] = mapped_column(String(100))
     group: Mapped[str | None] = mapped_column(String(50))
+    eprtr_code: Mapped[str | None] = mapped_column(
+        String(10), unique=True, comment="code in the E-PRTR register, e.g. 030402 for NOx"
+    )
 
 
 class WhoGuideline(Base):
@@ -205,6 +209,9 @@ class IngestionRun(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source_url: Mapped[str | None] = mapped_column(Text)
     file_hash: Mapped[str | None] = mapped_column(String(64), comment="SHA-256 of the file")
+    source_updated_at: Mapped[date | None] = mapped_column(
+        Date, comment="last update of the data, as the source's catalog says; null if unknown"
+    )
     rows_read: Mapped[int] = mapped_column(Integer, default=0, comment="rows in the file")
     rows_loaded: Mapped[int] = mapped_column(Integer, default=0, comment="rows written to core")
     rows_rejected: Mapped[int] = mapped_column(

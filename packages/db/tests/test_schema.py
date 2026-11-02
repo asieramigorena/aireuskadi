@@ -6,7 +6,7 @@ Skipped unless DATABASE_URL points to a database, e.g. the one of the local comp
 import os
 
 import pytest
-from aireuskadi_db import SCHEMA, Base, IngestionRun, create_all
+from aireuskadi_db import SCHEMA, Base, IngestionRun, Pollutant, create_all
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -49,6 +49,23 @@ def test_the_view_accepts_a_concurrent_refresh_right_after_creation(engine):
 def test_a_run_cannot_have_an_unknown_status(engine):
     with Session(engine) as session:
         session.add(IngestionRun(source="eprtr_air", status="halfway"))
+        with pytest.raises(IntegrityError):
+            session.flush()
+        session.rollback()
+
+
+def test_an_eprtr_code_belongs_to_one_pollutant_but_measured_only_pollutants_have_none(engine):
+    with Session(engine) as session:
+        session.add_all(
+            [
+                Pollutant(code="T_NOX", name="Nitrogen oxides", eprtr_code="T30402"),
+                Pollutant(code="T_NO2", name="Nitrogen dioxide"),  # only measured: no E-PRTR code
+                Pollutant(code="T_SO2", name="Sulphur dioxide"),
+            ]
+        )
+        session.flush()  # two pollutants without a code are fine
+
+        session.add(Pollutant(code="T_OTHER", name="Duplicate", eprtr_code="T30402"))
         with pytest.raises(IntegrityError):
             session.flush()
         session.rollback()
