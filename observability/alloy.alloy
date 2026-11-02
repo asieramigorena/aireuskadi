@@ -34,3 +34,63 @@ loki.write "loki" {
     url = "http://loki:3100/loki/api/v1/push"
   }
 }
+
+// Metrics of every container (is it up, since when, restarts, CPU, memory, network). The cAdvisor
+// that is built into Alloy reads them from the cgroups and the Docker socket, and Prometheus
+// stores them. The dashboard "Services" reads them there.
+prometheus.exporter.cadvisor "containers" {
+  docker_host         = "unix:///var/run/docker.sock"
+  // Docker with the containerd image store (the driver "overlayfs") keeps its containers in the
+  // containerd namespace "moby", and cAdvisor has to ask containerd about them.
+  containerd_host      = "/run/containerd/containerd.sock"
+  containerd_namespace = "moby"
+  docker_only          = true
+  storage_duration     = "5m"
+}
+
+prometheus.scrape "containers" {
+  targets         = prometheus.exporter.cadvisor.containers.targets
+  forward_to      = [prometheus.relabel.containers.receiver]
+  scrape_interval = "15s"
+}
+
+// `service` is the name of the Compose service ("redis", "ingestion-scheduler"...). cAdvisor does
+// not always know the labels of Compose (with the containerd image store it may take minutes or
+// never), but it always gives the image, so the service is taken from the image when the label
+// is missing: "docker.io/library/aireuskadi-postgres:latest" is "postgres", "redis:7-alpine" is
+// "redis", "grafana/grafana:12.0.0" is "grafana". What has no image is not a container, and the
+// labels that would put the paths of the machine into every series are dropped.
+prometheus.relabel "containers" {
+  forward_to = [prometheus.remote_write.prometheus.receiver]
+
+  rule {
+    source_labels = ["image"]
+    regex         = "(?:.*/)?(?:aireuskadi-)?([^/:]+)(?::[^/]*)?"
+    target_label  = "service"
+    replacement   = "$1"
+  }
+
+  rule {
+    source_labels = ["container_label_com_docker_compose_service"]
+    regex         = "(.+)"
+    target_label  = "service"
+    replacement   = "$1"
+  }
+
+  rule {
+    source_labels = ["image"]
+    regex         = ".+"
+    action        = "keep"
+  }
+
+  rule {
+    regex  = "container_label_com_docker_compose_(config_hash|image|project_config_files|project_working_dir|version|container_number)"
+    action = "labeldrop"
+  }
+}
+
+prometheus.remote_write "prometheus" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}

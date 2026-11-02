@@ -1,11 +1,23 @@
 # Local development stack: PostgreSQL + PostGIS and Redis.
 # Copy .env.example to .env before running `docker compose up -d`.
 # The application services are added here as they get their Dockerfile.
-# Centralised logs (Loki, Alloy, Grafana) only start with the profile `logging`:
-#   docker compose --profile logging up -d
+# Loki, Alloy, Prometheus and Grafana start with the rest: the logs and the state of every service
+# are in Grafana (http://127.0.0.1:3000, dashboards "Health", "Ingestion" and "Services").
 # The ingestion worker runs on demand, not with `up`:
 #   docker compose run --rm ingestion-worker boundaries
 #   docker compose run --rm ingestion-worker eprtr --year 2023
+# The image of the ingestion worker and the settings that its services share.
+x-ingestion-worker: &ingestion-worker
+  build:
+    context: .
+    dockerfile: services/ingestion-worker/worker.Dockerfile
+  profiles: [worker]
+  environment: &ingestion-environment
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+  depends_on:
+    postgres:
+      condition: service_healthy
+
 services:
   postgres:
     build: ./database
@@ -39,34 +51,47 @@ services:
   # Ingestion worker. Inside a container its logs reach Loki (see the logging profile).
   # Load the boundaries before the E-PRTR register.
   ingestion-worker:
-    build:
-      context: .
-      dockerfile: services/ingestion-worker/worker.Dockerfile
-    profiles: [worker]
+    <<: *ingestion-worker
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      <<: *ingestion-environment
       # Seconds the container stays up after a run so that Alloy reads its logs (see
       # entrypoint.sh). Only useful with the logging profile; use 0 to not wait.
       LOG_LINGER_SECONDS: ${LOG_LINGER_SECONDS:-20}
-    depends_on:
-      postgres:
-        condition: service_healthy
 
-  # Centralised logs. Alloy reads the logs of every container and sends them to Loki;
-  # Grafana searches them. Grafana is published on localhost only.
+  # The same image, kept up: it runs the loads when they are due (measurements every hour, the
+  # boundaries and the E-PRTR register every month) and remembers nothing but ingestion_run, so
+  # a restart loses nothing. Start it with: docker compose --profile worker up -d ingestion-scheduler
+  ingestion-scheduler:
+    <<: *ingestion-worker
+    command: ["schedule"]
+    restart: unless-stopped
+
+  # Centralised logs and metrics. Alloy reads the logs of every container and sends them to Loki,
+  # and the metrics (state, CPU, memory...) to Prometheus; Grafana shows both. Grafana is
+  # published on localhost only.
   # The Grafana stack (this block and observability/) was set up assisted by Claude.
   loki:
     image: grafana/loki:3.5.7
-    profiles: [logging]
     command: -config.file=/etc/loki/config.yml
     volumes:
       - ./observability/loki.yml:/etc/loki/config.yml:ro
       - loki-data:/loki
     restart: unless-stopped
 
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+
   alloy:
-    image: grafana/alloy:v1.10.0
-    profiles: [logging]
+    image: grafana/alloy:v1.20.1
     command:
       - run
       - --storage.path=/var/lib/alloy/data
@@ -77,13 +102,18 @@ services:
       # Read access to the logs of the other containers. The Docker socket gives full control of
       # Docker even when mounted read-only, so no other service gets it.
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /run/containerd/containerd.sock:/run/containerd/containerd.sock:ro
+      # The cAdvisor inside Alloy reads the cgroups and the data of Docker (read only) to get the
+      # CPU, the memory and the network of each container.
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
     depends_on:
       - loki
+      - prometheus
     restart: unless-stopped
 
   grafana:
     image: grafana/grafana:12.0.0
-    profiles: [logging]
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-me}
       GF_USERS_ALLOW_SIGN_UP: "false"
@@ -96,11 +126,13 @@ services:
       - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
     depends_on:
       - loki
+      - prometheus
     restart: unless-stopped
 
 volumes:
   postgres-data:
   loki-data:
+  prometheus-data:
   alloy-data:
   grafana-data:
   

@@ -1,0 +1,4 @@
+# Prometheus does not scrape anything itself: Alloy reads the metrics of the containers and sends
+# them to it (remote write), so there is only one place that has to reach the Docker socket.
+global:
+  scrape_interval: 15s
