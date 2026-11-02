@@ -111,10 +111,26 @@ docker compose run --rm ingestion-worker eprtr --year 2023
 docker compose run --rm ingestion-worker measurements
 ```
 
+To keep the data up to date without launching the loads by hand, run the scheduler. It stays up and
+runs the measurements every hour and the boundaries and the E-PRTR register every month (for the
+register it also looks for a new year, which does not exist until the Basque Government publishes it):
+
+```sh
+docker compose --profile worker up -d ingestion-scheduler
+```
+
+The scheduler keeps no state of its own: it reads `core.ingestion_run` to know when each load last
+succeeded, so a restart loses nothing and a stop of a few days is caught up (the measurements read
+back far enough to cover the gap, up to a week). A load that fails is tried again after ten
+minutes, not at its next turn, and one that fails does not stop the others. Instead of keeping a
+process up you can ask for a single pass with `python -m ingestion_worker.main schedule --once`, for
+example from a cron every five minutes: what is due is decided from `ingestion_run`, not from the
+time of the cron.
+
 It has a Dockerfile, `services/ingestion-worker/worker.Dockerfile`, built with the root of the
 repository as context, and a compose entry in the profile `worker`, so `docker compose up` does not
 start it. After a run the container stays up for `LOG_LINGER_SECONDS` seconds (20 by default) so
-that Alloy has time to read its logs; set it to 0 if you do not use the logging profile. The other
+that Alloy has time to read its logs; set it to 0 if you do not look at the logs in Grafana. The other
 application services have no Dockerfile yet, and `deploy-pro.yml` does not build this one.
 
 Every run is recorded in `core.ingestion_run`, with the rows read, loaded and rejected, the hash of
@@ -143,22 +159,31 @@ uv tool install pre-commit
 pre-commit install
 ```
 
-Optional: centralised logs. Every service writes JSON lines to standard output, and Alloy sends the
-logs of all the containers to Loki. The Grafana stack (Loki, Alloy and Grafana, in `observability/`
-and the `logging` profile of the compose) was set up assisted by Claude:
-
-```sh
-docker compose --profile logging up -d
-```
+Logs and the state of the services. Every service writes JSON lines to standard output. Alloy sends
+the logs of all the containers to Loki and their metrics (state, CPU, memory) to Prometheus, which
+keeps them for seven days, and Grafana shows both. All of it starts with `docker compose up` and uses
+about 500 MB of memory. The Grafana stack (Loki, Alloy, Prometheus and Grafana, in `observability/` and
+the compose) was set up assisted by Claude.
 
 Grafana is on <http://127.0.0.1:3000> (user `admin`, password `GRAFANA_ADMIN_PASSWORD` of `.env`)
-with Loki already configured. In Explore, `{service="redis"}` shows the logs of a service and
-`{service="ingestion-worker"} | json | level="WARNING"` filters by a field of the JSON lines.
+with Loki and Prometheus already configured. In Explore, `{service="redis"}` shows the logs of a
+service and `{service="ingestion-worker"} | json | level="WARNING"` filters by a field of the JSON
+lines.
 
-The folder `AirEuskadi` has two dashboards, loaded from `observability/dashboards/`: **Health**
-(errors and log volume of every container) and **Ingestion** (runs, rejected rows and errors of the
-worker; it has data when the worker runs in a container, as above). To change one, edit its JSON file, because
-the dashboards are read-only in Grafana.
+The folder `AirEuskadi` has three dashboards, loaded from `observability/dashboards/`: **Health**
+(errors and log volume of every container), **Ingestion** (runs, rejected rows and errors of the
+worker; it has data when the worker runs in a container, as above) and **Services** (which service is
+up or down, since when, restarts, CPU and memory). To change one, edit its JSON file, because the
+dashboards are read-only in Grafana.
+
+The metrics come from the cAdvisor that is built into Alloy, which reads the cgroups, the Docker
+socket and the containerd socket of the machine, all of them read only (`/sys`, `/var/lib/docker`,
+`/var/run/docker.sock` and `/run/containerd/containerd.sock` in the compose). Docker 29 keeps its
+containers in the containerd namespace `moby`; if your Docker keeps the containerd socket elsewhere,
+change it in `docker-compose.yml` and `observability/alloy.alloy`. The traffic of the network of each
+container is not shown: it needs the process namespace of the host. A service is "down" when it was
+seen in the last hour and not in the last minute; the worker of the loads is left out because it only
+runs on demand.
 
 ## Branches and deployment
 
@@ -177,8 +202,8 @@ pull request and CI, publishes the images of its last commit and merges it.
 The work is tracked in the issues. Done so far: the Python workspace and the data model, the local
 database and Redis, the CI and deployment workflows, and the ingestion worker for the boundaries, the
 E-PRTR register and the air quality measurements. Still empty: the FastAPI and Fastify apps and the
-web client. Next: the emissions inventory and a schedule for the worker (the loads are launched by
-hand today), and then expose the data through the APIs and the map.
+web client. The worker has its own scheduler. Next: the emissions inventory, and then expose the data
+through the APIs and the map.
 
 ## Licence
 
