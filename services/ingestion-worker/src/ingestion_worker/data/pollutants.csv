@@ -1,0 +1,40 @@
+eprtr_code,code,name,group
+020101,CADMIUM,Cadmium and compounds,heavy metal
+020102,MERCURY,Mercury and compounds,heavy metal
+020103,THALLIUM,Thallium,heavy metal
+020201,ARSENIC,Arsenic and compounds,heavy metal
+020202,COBALT,Cobalt and compounds,heavy metal
+020203,NICKEL,Nickel and compounds,heavy metal
+020301,ANTIMONY,Antimony and compounds,heavy metal
+020302,LEAD,Lead and compounds,heavy metal
+020303,CHROMIUM,Chromium and compounds,heavy metal
+020306,COPPER,Copper and compounds,heavy metal
+020307,MANGANESE,Manganese and compounds,heavy metal
+020312,ZINC,Zinc and compounds,heavy metal
+020313,VANADIUM,Vanadium,heavy metal
+030203,HCN,Hydrogen cyanide,inorganic gas
+030207,NH3,Ammonia,inorganic gas
+030208,HF,Fluorine and inorganic compounds (HF),inorganic gas
+030209,HCL,Chlorine and inorganic compounds (HCl),inorganic gas
+030401,SOX,Oxides of sulphur (SOx),inorganic gas
+030402,NOX,Oxides of nitrogen (NOx),inorganic gas
+030403,CO,Carbon monoxide,inorganic gas
+030404,CO2,Carbon dioxide,greenhouse gas
+040157,PCB,Polychlorinated biphenyls (PCB),organic
+040159,PECB,Pentachlorobenzene,organic
+040228,PCE,Tetrachloroethylene (perchloroethylene),organic
+040233,TCE,Trichloroethylene,organic
+040309,DCM,Dichloromethane,organic
+040403,HCB,Hexachlorobenzene,organic
+040404,NMVOC,Non-methane volatile organic compounds,organic
+040406,TOC,Total organic carbon,organic
+050106,PAH,Polycyclic aromatic hydrocarbons (PAH),organic
+050107,DIOXINS,Dioxins and furans (PCDD + PCDF),organic
+050302,BENZENE,Benzene,organic
+050308,VCM,Vinyl chloride,organic
+060101,PM10,Particulate matter PM10,particulate matter
+060103,TSP,Total suspended particulates,particulate matter
+070101,PFC,Perfluorocarbons (PFCs),greenhouse gas
+070102,N2O,Nitrous oxide,greenhouse gas
+070103,HFC,Hydrofluorocarbons (HFCs),greenhouse gas
+070105,CH4,Methane,greenhouse gas
