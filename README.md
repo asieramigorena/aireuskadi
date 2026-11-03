@@ -170,10 +170,11 @@ with Loki and Prometheus already configured. In Explore, `{service="redis"}` sho
 service and `{service="ingestion-worker"} | json | level="WARNING"` filters by a field of the JSON
 lines.
 
-The folder `AirEuskadi` has three dashboards, loaded from `observability/dashboards/`: **Health**
+The folder `AirEuskadi` has four dashboards, loaded from `observability/dashboards/`: **Health**
 (errors and log volume of every container), **Ingestion** (runs, rejected rows and errors of the
 worker; it has data when the worker runs in a container, as above) and **Services** (which service is
-up or down, since when, restarts, CPU and memory). To change one, edit its JSON file, because the
+up or down, since when, restarts, CPU and memory) and **API** (requests, errors and response time of
+an API service, `emissions-service` by default, read from its JSON logs). To change one, edit its JSON file, because the
 dashboards are read-only in Grafana.
 
 The metrics come from the cAdvisor that is built into Alloy, which reads the cgroups, the Docker

@@ -1,7 +1,7 @@
 {
   "uid": "aireuskadi-services",
   "title": "AirEuskadi · Services",
-  "description": "State of the services of the compose (up, since when, restarts, CPU and memory). The metrics are read from the containers by Alloy and stored in Prometheus. The worker of the loads is not listed: it runs on demand and is not up or down.",
+  "description": "State of the services of the compose (up, since when, restarts, CPU and memory). The metrics are read from the containers by Alloy and stored in Prometheus. The worker of the loads is not listed: it runs on demand and is not up or down. The cards and the table show the state at the end of the selected time range; the restarts count inside it and the charts follow it.",
   "tags": [
     "aireuskadi",
     "metrics"
@@ -151,8 +151,8 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Restarts (24 h)",
-      "description": "Times that a container started again in the last 24 hours. A service that is recreated by `docker compose up` is a new container and does not count.",
+      "title": "Restarts in the range",
+      "description": "Times that a container started again during the selected time range. A service that is recreated by `docker compose up` is a new container and does not count.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -170,7 +170,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(max by (service) (changes(container_start_time_seconds{service!=\"\",service!=\"ingestion-worker\",container_label_com_docker_compose_oneoff!=\"True\"}[24h])))",
+          "expr": "sum(max by (service) (changes(container_start_time_seconds{service!=\"\",service!=\"ingestion-worker\",container_label_com_docker_compose_oneoff!=\"True\"}[$__range])))",
           "refId": "A",
           "legendFormat": "",
           "instant": true,
@@ -398,7 +398,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "max by (service) (changes(container_start_time_seconds{service!=\"\",service!=\"ingestion-worker\",container_label_com_docker_compose_oneoff!=\"True\"}[24h]))",
+          "expr": "max by (service) (changes(container_start_time_seconds{service!=\"\",service!=\"ingestion-worker\",container_label_com_docker_compose_oneoff!=\"True\"}[$__range]))",
           "refId": "C",
           "legendFormat": "{{service}}",
           "instant": true,
@@ -411,7 +411,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "max by (service) (rate(container_cpu_usage_seconds_total{service!=\"\",service!=\"ingestion-worker\",container_label_com_docker_compose_oneoff!=\"True\"}[2m])) * 100",
+          "expr": "max by (service) (rate(container_cpu_usage_seconds_total{service!=\"\",service!=\"ingestion-worker\",container_label_com_docker_compose_oneoff!=\"True\"}[$__rate_interval])) * 100",
           "refId": "D",
           "legendFormat": "{{service}}",
           "instant": true,
@@ -454,7 +454,7 @@
             "renameByName": {
               "Value #A": "State",
               "Value #B": "Uptime",
-              "Value #C": "Restarts (24 h)",
+              "Value #C": "Restarts",
               "Value #D": "CPU",
               "Value #E": "Memory"
             },
@@ -462,7 +462,7 @@
               "service": 0,
               "State": 1,
               "Uptime": 2,
-              "Restarts (24 h)": 3,
+              "Restarts": 3,
               "CPU": 4,
               "Memory": 5
             }
@@ -542,7 +542,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Restarts (24 h)"
+              "options": "Restarts"
             },
             "properties": [
               {
@@ -638,7 +638,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "max by (service) (rate(container_cpu_usage_seconds_total{service!=\"\",service!=\"ingestion-worker\",container_label_com_docker_compose_oneoff!=\"True\"}[2m])) * 100",
+          "expr": "max by (service) (rate(container_cpu_usage_seconds_total{service!=\"\",service!=\"ingestion-worker\",container_label_com_docker_compose_oneoff!=\"True\"}[$__rate_interval])) * 100",
           "refId": "A",
           "legendFormat": "{{service}}"
         }
