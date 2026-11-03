@@ -65,5 +65,7 @@ def test_the_eprtr_job_loads_the_year_it_has_and_the_next_one_if_the_register_pu
     files = [u for u in requested if u.endswith("aire_eprtr.csv")]
     assert [re.search(r"e_prtr_euskadi_(\d+)", u).group(1) for u in files] == ["2023", "2024"]
     with Session(engine) as session:
-        runs = session.scalars(select(IngestionRun).where(IngestionRun.source == "eprtr_air")).all()
+        runs = session.scalars(
+            select(IngestionRun).where(IngestionRun.source == "eprtr_air").order_by(IngestionRun.id)
+        ).all()
         assert [r.status for r in runs[-2:]] == ["succeeded", "succeeded"]
