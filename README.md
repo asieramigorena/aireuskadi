@@ -103,7 +103,11 @@ uv run --env-file .env python -m ingestion_worker.main measurements --hours 48
 
 The database listens on `127.0.0.1:5432` and Redis on `127.0.0.1:6379`. The tables are created
 with `create_all()` and are not migrated: after changing the model, recreate the database with
-`docker compose down -v`. The tests that use the database only run when `DATABASE_URL` is set; they
+`docker compose down -v`. To keep the data when the change only adds a column, add it by hand and
+load again; for example the lighter geometry of the boundaries for the web map:
+`ALTER TABLE core.territory ADD COLUMN IF NOT EXISTS geom_simplified geometry(MultiPolygon,4326)`
+(the same for `core.district` and `core.municipality`), then run the `boundaries` load below.
+The tests that use the database only run when `DATABASE_URL` is set; they
 write rows of their own (municipality `99001`) and remove them.
 
 The worker also runs in a container, which is the way its logs reach Loki and Grafana. Run these

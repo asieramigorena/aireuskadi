@@ -39,6 +39,10 @@ class Territory(Base):
     code: Mapped[str] = mapped_column(CHAR(2), primary_key=True, comment="INE province code")
     name: Mapped[str] = mapped_column(String(100))
     geom = mapped_column(Geometry("MULTIPOLYGON", srid=SRID))
+    geom_simplified = mapped_column(
+        Geometry("MULTIPOLYGON", srid=SRID),
+        comment="lighter geometry for the web map, simplified with its whole layer",
+    )
 
     districts: Mapped[list["District"]] = relationship(back_populates="territory")
 
@@ -50,6 +54,10 @@ class District(Base):
     territory_code: Mapped[str] = mapped_column(ForeignKey("territory.code"), index=True)
     name: Mapped[str] = mapped_column(String(100))
     geom = mapped_column(Geometry("MULTIPOLYGON", srid=SRID))
+    geom_simplified = mapped_column(
+        Geometry("MULTIPOLYGON", srid=SRID),
+        comment="lighter geometry for the web map, simplified with its whole layer",
+    )
 
     territory: Mapped[Territory] = relationship(back_populates="districts")
     municipalities: Mapped[list["Municipality"]] = relationship(back_populates="district")
@@ -65,6 +73,10 @@ class Municipality(Base):
     name: Mapped[str] = mapped_column(String(100))
     area_km2: Mapped[Decimal] = mapped_column(Numeric(10, 3))
     geom = mapped_column(Geometry("MULTIPOLYGON", srid=SRID))
+    geom_simplified = mapped_column(
+        Geometry("MULTIPOLYGON", srid=SRID),
+        comment="lighter geometry for the web map, simplified with its whole layer",
+    )
 
     district: Mapped[District] = relationship(back_populates="municipalities")
     facilities: Mapped[list["Facility"]] = relationship(back_populates="municipality")

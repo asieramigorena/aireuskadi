@@ -1,6 +1,7 @@
 """GeoEuskadi boundaries: territories, districts (comarcas) and municipalities."""
 
 import geopandas as gpd
+import shapely
 from aireuskadi_db import District, Municipality, Territory
 from geoalchemy2.shape import from_shape
 from shapely.geometry import MultiPolygon, Polygon
@@ -33,7 +34,7 @@ def municipality_records(municipalities: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
             "area_km2": municipalities.geometry.area / 1_000_000,  # metres squared -> km2
         },
         geometry=_to_degrees_multipolygon(municipalities.geometry),
-    )
+    ).pipe(_with_simplified)
 
 
 def territory_records(territories: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -41,7 +42,7 @@ def territory_records(territories: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame(
         {"code": territories["PRO_PROV"], "name": territories["TERRITORIO"]},
         geometry=_to_degrees_multipolygon(territories.geometry),
-    )
+    ).pipe(_with_simplified)
 
 
 def district_records(districts: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -53,7 +54,33 @@ def district_records(districts: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
             "name": districts["COMARCA"],
         },
         geometry=_to_degrees_multipolygon(districts.geometry),
-    )
+    ).pipe(_with_simplified)
+
+
+# In degrees: about 55 m north-south and 40 m east-west at 43 degrees north. On the real municipalities
+# (with the snapping below) it keeps 6 % of the vertices (8.9 MB of GeoJSON become 0.58 MB) and changes
+# no area by more than 1.1 %; a bigger tolerance deforms more than it saves.
+SIMPLIFY_TOLERANCE = 0.0005
+
+
+# The vertices are moved to a grid of about 0.1 m before simplifying. The layer of GeoEuskadi is not
+# a perfect coverage: 121 of its 252 municipalities have an edge that does not match the one of the
+# neighbour by a few centimetres, and then the simplifier draws each side of the border on its own.
+# Snapping first took the overlaps between neighbours from 415,000 m2 in all to 57 m2 (5 pairs), with the same
+# number of parts (a coarser grid of 1 m left no overlaps but broke narrow areas into 63 slivers).
+# assisted by GenAI
+SNAP_GRID = 1e-6
+
+
+def _with_simplified(records: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Adds `simplified`, a lighter geometry of the same layer for the web map.
+
+    The whole layer is simplified together as a coverage: neighbours share a border, and
+    simplifying each one on its own would draw it differently on each side and leave gaps and
+    overlaps between them.
+    """
+    snapped = shapely.set_precision(records.geometry.to_numpy(), SNAP_GRID)
+    return records.assign(simplified=shapely.coverage_simplify(snapped, SIMPLIFY_TOLERANCE))
 
 
 def _to_degrees_multipolygon(geometry: gpd.GeoSeries) -> gpd.GeoSeries:
@@ -86,8 +113,9 @@ def load_boundaries(
 
 def _row(record: dict) -> dict:
     """A record of a *_records function as the columns of its table."""
-    row = {name: value for name, value in record.items() if name != "geometry"}
+    row = {name: value for name, value in record.items() if name not in ("geometry", "simplified")}
     row["geom"] = from_shape(record["geometry"], srid=SRID)
+    row["geom_simplified"] = from_shape(record["simplified"], srid=SRID)
     return row
 
 
