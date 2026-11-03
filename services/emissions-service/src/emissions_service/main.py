@@ -7,7 +7,7 @@ from aireuskadi_logger import configure_logging
 from fastapi import FastAPI
 from sqlalchemy import Engine
 
-from emissions_service import facilities, pollutants
+from emissions_service import facilities, health, pollutants
 from emissions_service.database import create_database_engine
 from emissions_service.logs import install_request_log
 from emissions_service.problems import install_problem_documents
@@ -27,6 +27,7 @@ def create_app(engine: Engine, *, docs: bool = False) -> FastAPI:
     app.state.engine = engine
     install_problem_documents(app)
     install_request_log(app)
+    app.include_router(health.router)
     app.include_router(pollutants.router)
     app.include_router(facilities.router)
     return app

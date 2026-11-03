@@ -62,6 +62,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # /health asks the database. The image has no curl, so Python makes the request; a 503 raises
+    # in urlopen and the command fails.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
 
   # Ingestion worker. Inside a container its logs reach Loki (see the logging profile).

@@ -9,6 +9,8 @@ import time
 
 from fastapi import FastAPI, Request
 
+from emissions_service.health import HEALTH_PATH
+
 _access = logging.getLogger("emissions_service.access")
 
 
@@ -25,7 +27,10 @@ def install_request_log(app: FastAPI) -> None:
             status = response.status_code
             return response
         finally:
-            _access.info(
+            # The checks of the compose come every few seconds: they are only in the log at DEBUG.
+            level = logging.DEBUG if request.url.path == HEALTH_PATH else logging.INFO
+            _access.log(
+                level,
                 "request",
                 extra={
                     "method": request.method,
