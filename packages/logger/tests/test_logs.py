@@ -7,6 +7,7 @@ import sys
 from collections.abc import Mapping
 from datetime import date
 from decimal import Decimal
+from pathlib import PurePosixPath
 from typing import NamedTuple
 
 import pytest
@@ -268,3 +269,185 @@ def test_a_traceback_has_a_bigger_limit_than_a_value():
     assert "truncated" not in middle
     assert len(long) < 8100
     assert "...[truncated " in long
+
+
+# A log line has to be valid JSON, has to be bounded whatever it is given, and writing it must
+# never fail or fall back to something that is not redacted.
+
+
+def strict(line):
+    """Parse like a strict reader (Loki's): NaN and Infinity are not JSON."""
+
+    def refuse(constant):
+        raise ValueError(f"{constant} is not valid JSON")
+
+    return json.loads(line, parse_constant=refuse)
+
+
+def test_nan_and_infinity_are_written_as_text_because_json_does_not_have_them():
+    entry = strict(line_with(a=float("nan"), b=float("inf"), c=float("-inf")))
+
+    assert (entry["a"], entry["b"], entry["c"]) == ("nan", "inf", "-inf")
+
+
+def test_a_key_that_is_not_text_is_written_as_its_class_name_never_by_its_content():
+    line = line_with(thing={Credentials("u", "SECRETPW"): 1, (1, 2): 2, 7: 3, "ok": 4})
+
+    assert "SECRETPW" not in line
+    assert json.loads(line)["thing"] == {"<Credentials>": 1, "<tuple>": 2, "7": 3, "ok": 4}
+
+
+def test_a_key_and_the_name_of_a_field_are_cut_like_a_text():
+    entry = json.loads(line_with(thing={"k" * 5000: 1}, **{"f" * 5000: 2}))
+
+    assert [len(key) for key in entry["thing"]] == [2000 + len("...[truncated 3000]")]
+    assert max(len(key) for key in entry) < 2100
+
+
+def test_a_long_list_is_cut_to_a_hundred_items_and_says_how_many_were_left_out():
+    entry = json.loads(line_with(thing=list(range(1_000_000))))
+
+    assert entry["thing"][:100] == list(range(100))
+    assert entry["thing"][100:] == ["...[999900 more]"]
+
+
+def test_a_big_dictionary_is_cut_to_a_hundred_items_and_says_how_many_were_left_out():
+    thing = json.loads(line_with(thing={f"k{i}": i for i in range(200_000)}))["thing"]
+
+    assert len(thing) == 101
+    assert thing["..."] == "[199900 more]"
+
+
+def test_a_list_nested_too_deep_or_pointing_to_itself_is_cut_instead_of_failing():
+    deep = current = []
+    for _ in range(3000):
+        nested = []
+        current.append(nested)
+        current = nested
+    loop = []
+    loop.append(loop)
+
+    assert json.loads(line_with(thing=deep))["thing"] == [[[[["<list>"]]]]]
+    assert json.loads(line_with(thing=loop))["thing"] == [[[[["<list>"]]]]]
+
+
+def test_an_integer_too_big_for_json_to_print_is_written_as_its_class_name():
+    entry = json.loads(line_with(small=2**63 - 1, edge=2**63, big=10**5000))
+
+    assert (entry["small"], entry["edge"], entry["big"]) == (2**63 - 1, "<int>", "<int>")
+
+
+def test_the_text_of_a_value_that_is_written_as_text_is_cut_too():
+    entry = json.loads(line_with(path=PurePosixPath("/" + "p" * 5000)))
+
+    assert len(entry["path"]) == 2000 + len("...[truncated 3001]")
+
+
+def test_a_record_that_cannot_be_formatted_gives_a_fixed_valid_line_not_an_error():
+    record = logging.makeLogRecord({"msg": "%d things", "args": ("not a number",), "name": "t"})
+
+    entry = json.loads(JsonFormatter().format(record))
+
+    assert (entry["level"], entry["message"]) == ("ERROR", "log record could not be formatted")
+    assert entry["record_logger"] == "t"
+    assert "not a number" not in json.dumps(entry)  # the arguments are not repeated
+
+
+def test_a_lone_surrogate_does_not_stop_the_line_from_being_written(capsys):
+    configure_logging("test_service")
+
+    logging.getLogger("t").info("x", extra={"v": "ab\ud800cd"})
+
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["v"] == "ab?cd"
+    assert captured.err == ""  # logging does not dump the record on the error output
+
+
+def test_a_whole_line_never_grows_past_its_limit():
+    fields = {f"field{i}": "x" * 1900 for i in range(60)}
+
+    line = line_with(**fields)
+
+    assert len(line) <= 16_000
+    entry = json.loads(line)
+    assert entry["message"] == "x"
+    assert entry["fields_dropped"] > 0
+
+
+class BrokenOutput(io.StringIO):
+    def write(self, text):
+        raise OSError("the output is closed")
+
+
+def test_when_the_output_itself_fails_the_record_is_not_dumped_on_the_error_output(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(sys, "stdout", BrokenOutput())
+    configure_logging("test_service")
+
+    logging.getLogger("t").info("a message that carries SECRETPW")
+
+    assert capsys.readouterr().err == ""
+
+
+# A password can still get into a log as part of a text: in the message, in the message of an
+# exception, in a value. The credentials of a URL are hidden wherever they are.
+
+URL = "postgresql+psycopg://reader:SECRETPW@db:5432/air"
+HIDDEN = "postgresql+psycopg://reader:***@db:5432/air"
+
+
+def test_the_password_of_a_url_in_the_message_is_hidden():
+    record = logging.makeLogRecord({"msg": "cannot reach %s", "args": (URL,), "name": "t"})
+
+    assert json.loads(JsonFormatter().format(record))["message"] == f"cannot reach {HIDDEN}"
+
+
+def test_the_password_of_a_url_in_an_exception_is_hidden():
+    try:
+        raise ValueError(f"bad url {URL}")
+    except ValueError:
+        record = logging.makeLogRecord({"msg": "failed", "name": "t", "exc_info": sys.exc_info()})
+
+    line = JsonFormatter().format(record)
+
+    assert "SECRETPW" not in line
+    assert HIDDEN in json.loads(line)["exception"]
+
+
+def test_the_password_of_a_url_in_a_value_a_list_or_a_key_is_hidden():
+    line = line_with(a=URL, b=[1, {"c": URL}], d={URL: 1})
+
+    assert "SECRETPW" not in line
+    entry = json.loads(line)
+    assert (entry["a"], entry["b"][1]["c"]) == (HIDDEN, HIDDEN)
+    assert list(entry["d"]) == [HIDDEN]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "https://example.com/path",
+        "https://example.com:8080/a@b",  # a port, then a path with an @
+        "mail me at someone@example.com",
+        "postgresql://db:5432/air",
+        "key: value @ home",
+    ],
+)
+def test_a_text_that_has_no_credentials_in_a_url_is_not_touched(text):
+    assert json.loads(line_with(a=text))["a"] == text
+
+
+def test_two_urls_in_one_text_are_both_hidden():
+    entry = json.loads(line_with(a=f"{URL} and {URL}"))
+
+    assert entry["a"] == f"{HIDDEN} and {HIDDEN}"
+
+
+def test_a_password_that_the_cut_would_split_is_hidden_before_the_cut_not_left_half_visible():
+    # The URL starts 35 characters before the limit, so the cut would fall inside the password.
+    text = "a" * (2000 - 35) + URL
+
+    line = line_with(a=text)
+
+    assert "SEC" not in line
