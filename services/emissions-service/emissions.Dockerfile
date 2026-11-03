@@ -30,6 +30,6 @@ USER emissions
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
 # The request log comes from the application (JSON, without the query string).
-# Listens on every interface of the container, but the compose publishes no port: only the other
+# --no-server-header: the answers do not say which software is behind. Listens on every interface of the container, but the compose publishes no port: only the other
 # containers of the internal network (the gateway) can reach it.
-CMD ["uvicorn", "emissions_service.main:app_from_env", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "emissions_service.main:app_from_env", "--factory", "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]

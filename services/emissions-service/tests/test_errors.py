@@ -54,3 +54,13 @@ def test_the_whole_422_problem_document_for_a_missing_parameter(client):
         "detail": "The request has invalid or missing parameters.",
         "errors": [{"loc": ["query", "year"], "msg": "Field required", "type": "missing"}],
     }
+
+
+def test_a_path_with_a_trailing_slash_is_a_404_not_a_redirect_that_repeats_the_host(client):
+    # A redirect would send the browser to whatever the Host header says, and behind the compose
+    # it would give away the internal name and port of the service.
+    for path in ("/pollutants/", "/facilities/1/", "/facilities/points/"):
+        response = client.get(path, headers={"host": "evil.example:99"}, follow_redirects=False)
+
+        assert response.status_code == 404
+        assert "location" not in response.headers

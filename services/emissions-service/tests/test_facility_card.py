@@ -14,14 +14,15 @@ def test_the_card_has_the_facility_its_municipality_and_only_its_own_emissions(
         43.2,
         name="Test plant",
         activity="Test activity",
-        emissions=[("TSTP", 2022, "10"), ("TSTP", 2023, "500.5"), ("TSTQ", 2023, "700")],
+        emissions=[("TSTP", 2022, "9000"), ("TSTP", 2023, "500.5"), ("TSTQ", 2023, "700")],
     )
     add_facility("T0000000B", -2.8, 43.3, emissions=[("TSTP", 2023, "999")])
 
     response = client.get(f"/facilities/{facility_id}")
 
     assert response.status_code == 200
-    # Emissions: latest year first and, inside a year, the biggest amount first.
+    # Emissions: latest year first and, inside a year, the biggest amount first. The oldest year
+    # has the biggest amount, so ordering by amount alone would put it first.
     assert response.json() == {
         "id": facility_id,
         "nima": "T0000000A",
@@ -32,7 +33,7 @@ def test_the_card_has_the_facility_its_municipality_and_only_its_own_emissions(
         "emissions": [
             {"year": 2023, "pollutant": "TSTQ", "name": "Test pollutant Q", "kg": 700.0},
             {"year": 2023, "pollutant": "TSTP", "name": "Test pollutant P", "kg": 500.5},
-            {"year": 2022, "pollutant": "TSTP", "name": "Test pollutant P", "kg": 10.0},
+            {"year": 2022, "pollutant": "TSTP", "name": "Test pollutant P", "kg": 9000.0},
         ],
     }
 

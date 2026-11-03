@@ -52,13 +52,14 @@ def refuse_year_out_of_range(year: int, session: Session) -> None:
     """A year that has not ended yet, or is earlier than the first one with emissions, has no
     data to ask for: refuse it with a 422 instead of answering an empty list."""
     last = date.today().year - 1
-    first = session.scalar(select(func.min(FacilityEmission.year)))
     if year > last:
         problem = {"type": "less_than_equal", "msg": f"Input should be at most {last}"}
-    elif first is not None and year < first:
-        problem = {"type": "greater_than_equal", "msg": f"Input should be at least {first}"}
     else:
-        return
+        # Only now is the database asked: a year that has not ended needs no query to refuse.
+        first = session.scalar(select(func.min(FacilityEmission.year)))
+        if first is None or year >= first:
+            return
+        problem = {"type": "greater_than_equal", "msg": f"Input should be at least {first}"}
     raise RequestValidationError([{**problem, "loc": ("query", "year"), "input": year}])
 
 

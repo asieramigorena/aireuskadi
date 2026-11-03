@@ -31,3 +31,20 @@ def test_starting_the_application_switches_the_logs_to_json(engine, capsys):
     logging.getLogger("emissions_service.access").info("request", extra={"status": 200})
 
     assert json.loads(capsys.readouterr().out.splitlines()[-1])["status"] == 200
+
+
+def test_under_uvicorn_the_starting_application_takes_over_uvicorns_own_log_handlers(
+    engine, capsys
+):
+    # uvicorn installs its own plain-text handler before it loads the application.
+    uvicorn = logging.getLogger("uvicorn")
+    uvicorn.addHandler(logging.StreamHandler())
+    uvicorn.propagate = False
+
+    app_from_env()
+    logging.getLogger("uvicorn.error").info("Application startup complete.")
+
+    captured = capsys.readouterr()
+    (entry,) = [json.loads(line) for line in captured.out.splitlines()]
+    assert entry["message"] == "Application startup complete."
+    assert captured.err == ""  # no second copy in plain text
