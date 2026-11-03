@@ -14,3 +14,4 @@ dist/
 docker-compose.override.yml
 
 docs/
+.vscode/
