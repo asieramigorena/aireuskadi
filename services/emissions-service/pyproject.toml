@@ -5,12 +5,14 @@ description = "AirEuskadi emissions REST API"
 requires-python = ">=3.12"
 dependencies = [
     "aireuskadi-db",
+    "aireuskadi-logger",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
 ]
 
 [tool.uv.sources]
 aireuskadi-db = { workspace = true }
+aireuskadi-logger = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

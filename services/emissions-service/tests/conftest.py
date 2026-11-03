@@ -2,6 +2,7 @@
 
 import logging
 import os
+import sys
 
 import pytest
 from aireuskadi_db import (
@@ -69,13 +70,17 @@ def add_pollutant(engine):
 
 @pytest.fixture(autouse=True)
 def keep_logging_state():
-    """configure_logging changes the root logger and uvicorn's: put them back after the test."""
+    """app_from_env sets up the logging (the root logger, uvicorn's, sys.excepthook): put it back
+    after the test."""
     names = ["", "uvicorn", "uvicorn.error", "uvicorn.access"]
     saved = [(n, logging.getLogger(n).handlers[:], logging.getLogger(n).propagate) for n in names]
+    level, hook = logging.getLogger().level, sys.excepthook
     yield
     for name, handlers, propagate in saved:
         logging.getLogger(name).handlers[:] = handlers
         logging.getLogger(name).propagate = propagate
+    logging.getLogger().setLevel(level)
+    sys.excepthook = hook
 
 
 @pytest.fixture
@@ -83,7 +88,7 @@ def add_facility(engine):
     """A facility at (lon, lat), or without a position if lon is None, with its emissions
     [(pollutant, year, kg), ...], in a test municipality (99001) that is created the first time."""
 
-    def add(nima, lon, lat, emissions=(), name="Test facility"):
+    def add(nima, lon, lat, emissions=(), name="Test facility", activity=None):
         with Session(engine) as session:
             if session.get(Municipality, "99001") is None:
                 session.add(Territory(code="99", name="Test territory"))
@@ -98,6 +103,7 @@ def add_facility(engine):
                 municipality_code="99001",
                 nima=nima,
                 name=name,
+                activity=activity,
                 geom=None if lon is None else WKTElement(f"POINT({lon} {lat})", srid=4326),
             )
             session.add(facility)

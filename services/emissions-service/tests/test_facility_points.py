@@ -122,3 +122,22 @@ def test_a_pollutant_that_does_not_exist_is_an_empty_list_not_a_404(client):
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+@pytest.mark.parametrize(
+    "pollutant",
+    ["", "\x00", "NOX\x00", "NOX\n", "A" * 21, "NOX!", "nox", "NO X", "NOX'; DROP TABLE x;--", "Ñ"],
+)
+def test_a_pollutant_code_that_cannot_be_one_is_a_422_before_it_reaches_the_database(
+    client, pollutant
+):
+    response = client.get("/facilities/points", params={"pollutant": pollutant, "year": 2023})
+
+    assert problem_loc(response) == [["query", "pollutant"]]
+
+
+@pytest.mark.parametrize("pollutant", ["A", "PM10", "CO2", "TST_1", "A" * 20])
+def test_a_well_formed_pollutant_code_is_accepted_whether_it_exists_or_not(client, pollutant):
+    response = client.get("/facilities/points", params={"pollutant": pollutant, "year": 2023})
+
+    assert response.status_code == 200

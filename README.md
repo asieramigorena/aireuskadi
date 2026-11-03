@@ -44,6 +44,7 @@ call each other. Every API is REST with OpenAPI 3.x.
 | `services/air-quality-service` | Air quality measurements | Node.js 22, TypeScript, Fastify |
 | `services/ingestion-worker` | Downloads open data into the database | Python |
 | `packages/db` | Data model shared by the Python components | SQLAlchemy 2, GeoAlchemy2 |
+| `packages/logger` | JSON logging shared by the Python services (one JSON object per line) | Python standard library |
 | `database` | PostgreSQL image with PostGIS (amd64 and arm64) | Docker |
 
 The database has one schema, `core`, with the normalised model. `core.unit_indicator` is a
@@ -141,7 +142,7 @@ nothing of it stays.
 The worker (`services/ingestion-worker/src/ingestion_worker`) is organised by data source and by
 general use: `boundaries/`, `eprtr/` and `measurements/` have one folder each, with the code that
 reads the source, locates or checks it, loads it into `core` and runs the whole load; `common/` has
-what every load shares (download, logs, the record of each run). The tests follow the same folders.
+what every load shares (download, the record of each run). The JSON logs come from `packages/logger`. The tests follow the same folders.
 
 Checks that CI also runs:
 

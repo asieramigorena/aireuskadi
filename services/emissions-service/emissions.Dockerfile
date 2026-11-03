@@ -1,5 +1,5 @@
 # Image of the emissions service. Build it with the repository root as context (the service needs
-# packages/db and uv.lock, which live outside this folder):
+# packages/db, packages/logger and uv.lock, which live outside this folder):
 #   docker compose build emissions-service
 # It is not called "Dockerfile" on purpose, for the same reason as the worker's: deploy-pro.yml and
 # the CI build every file with that name using its own folder as context.
@@ -16,6 +16,7 @@ WORKDIR /app
 # The workspace needs the pyproject of every Python member, even if only one is installed.
 COPY pyproject.toml uv.lock ./
 COPY packages/db packages/db
+COPY packages/logger packages/logger
 COPY services/api-gateway/pyproject.toml services/api-gateway/pyproject.toml
 COPY services/ingestion-worker/pyproject.toml services/ingestion-worker/pyproject.toml
 COPY services/emissions-service/pyproject.toml services/emissions-service/pyproject.toml

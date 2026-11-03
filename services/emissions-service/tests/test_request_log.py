@@ -2,6 +2,10 @@
 
 import logging
 
+from emissions_service.main import create_app
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+
 ACCESS = "emissions_service.access"
 
 
@@ -27,3 +31,20 @@ def test_a_request_that_ends_in_an_error_is_logged_with_its_status(client, caplo
 
     (record,) = requests_logged(caplog)
     assert record.status == 404
+
+
+def test_a_request_that_crashes_is_logged_as_a_500_without_its_query_string(caplog):
+    # The route fails on purpose; the engine never connects because the route does not use it.
+    app = create_app(create_engine("postgresql+psycopg://nobody@127.0.0.1:1/none"))
+
+    @app.get("/boom")
+    def boom():
+        raise RuntimeError("on purpose")
+
+    client = TestClient(app, raise_server_exceptions=False)
+    with caplog.at_level(logging.INFO, logger=ACCESS):
+        response = client.get("/boom?secret=1")
+
+    assert response.status_code == 500
+    (record,) = requests_logged(caplog)
+    assert (record.method, record.path, record.status) == ("GET", "/boom", 500)

@@ -14,6 +14,7 @@ resolution-markers = [
 members = [
     "aireuskadi",
     "aireuskadi-db",
+    "aireuskadi-logger",
     "api-gateway",
     "emissions-service",
     "ingestion-worker",
@@ -54,6 +55,11 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "sqlalchemy", specifier = ">=2.0" },
 ]
+
+[[package]]
+name = "aireuskadi-logger"
+version = "0.1.0"
+source = { editable = "packages/logger" }
 
 [[package]]
 name = "annotated-doc"
@@ -138,6 +144,7 @@ version = "0.1.0"
 source = { editable = "services/emissions-service" }
 dependencies = [
     { name = "aireuskadi-db" },
+    { name = "aireuskadi-logger" },
     { name = "fastapi" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -150,6 +157,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aireuskadi-db", editable = "packages/db" },
+    { name = "aireuskadi-logger", editable = "packages/logger" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
@@ -351,6 +359,7 @@ version = "0.1.0"
 source = { editable = "services/ingestion-worker" }
 dependencies = [
     { name = "aireuskadi-db" },
+    { name = "aireuskadi-logger" },
     { name = "geopandas" },
     { name = "httpx" },
     { name = "openpyxl" },
@@ -359,6 +368,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "aireuskadi-db", editable = "packages/db" },
+    { name = "aireuskadi-logger", editable = "packages/logger" },
     { name = "geopandas", specifier = ">=1.2.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "openpyxl", specifier = ">=3.1.5" },
