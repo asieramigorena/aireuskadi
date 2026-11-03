@@ -55,7 +55,10 @@ services:
       context: .
       dockerfile: services/emissions-service/emissions.Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # Same database, other user: this service only reads, so it connects with the read-only role
+      # (created by aireuskadi-db-init), never with the owner. The password of the owner does not
+      # reach this container.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_READER_USER}:${POSTGRES_READER_PASSWORD}@postgres:5432/${POSTGRES_DB}
     depends_on:
       postgres:
         condition: service_healthy

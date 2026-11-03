@@ -84,7 +84,10 @@ docker compose up -d --wait
 # Python components
 uv sync --all-packages
 
-# Create the core schema, its tables and the unit_indicator view (safe to repeat)
+# Create the core schema, its tables and the unit_indicator view (safe to repeat). If
+# POSTGRES_READER_USER and POSTGRES_READER_PASSWORD are in .env it also creates the read-only role
+# that the services which only read connect with (they never use the owner of the database); run
+# it again to change that password
 uv run --env-file .env aireuskadi-db-init
 
 # Load the data: the boundaries first, then the E-PRTR register of one year and the last hours
@@ -142,7 +145,8 @@ nothing of it stays.
 The worker (`services/ingestion-worker/src/ingestion_worker`) is organised by data source and by
 general use: `boundaries/`, `eprtr/` and `measurements/` have one folder each, with the code that
 reads the source, locates or checks it, loads it into `core` and runs the whole load; `common/` has
-what every load shares (download, the record of each run). The JSON logs come from `packages/logger`. The tests follow the same folders.
+what every load shares (download, the record of each run). The JSON logs come from
+`packages/logger`. The tests follow the same folders.
 
 Checks that CI also runs:
 

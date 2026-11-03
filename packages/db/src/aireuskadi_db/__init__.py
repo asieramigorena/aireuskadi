@@ -15,6 +15,7 @@ from aireuskadi_db.models import (
     Territory,
     WhoGuideline,
 )
+from aireuskadi_db.roles import create_reader_role
 from aireuskadi_db.schema import create_all
 from aireuskadi_db.views import UNIT_INDICATOR_DDL, unit_indicator
 
@@ -35,5 +36,6 @@ __all__ = [
     "Territory",
     "WhoGuideline",
     "create_all",
+    "create_reader_role",
     "unit_indicator",
 ]
