@@ -107,8 +107,12 @@ with `create_all()` and are not migrated: after changing the model, recreate the
 load again; for example the lighter geometry of the boundaries for the web map:
 `ALTER TABLE core.territory ADD COLUMN IF NOT EXISTS geom_simplified geometry(MultiPolygon,4326)`
 (the same for `core.district` and `core.municipality`), then run the `boundaries` load below.
-The tests that use the database only run when `DATABASE_URL` is set; they
-write rows of their own (municipality `99001`) and remove them.
+The tests that use the database only run when `DATABASE_URL` is set, and they never use that
+database: a pytest plugin (`packages/db/tests/testing.py`) creates a database of their own on the same server
+(`<name>_test`, for example `aireuskadi_test`) the first time and points the tests to it, so the
+rows they write and the constraints they break on purpose stay out of the data of the application
+and out of the logs that Grafana shows. Roles belong to the whole server, so a test that creates one
+drops it itself.
 
 The worker also runs in a container, which is the way its logs reach Loki and Grafana. Run these
 from the root of the repository:
