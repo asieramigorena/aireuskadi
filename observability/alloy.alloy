@@ -7,8 +7,15 @@ discovery.docker "containers" {
 }
 
 // Labels used to search: the compose service ("redis", "ingestion-worker"...) and the container.
+//
+// The targets also go through the last rule, which drops the labels that change when a container
+// restarts: its IP address, its ports and the data of the compose file. Alloy remembers how far it
+// has read each container under a key made of ALL the labels of its target, so with them a restart
+// (after a reboot, Docker gives other IPs) made every container look new: Alloy read its whole log
+// again from the first line, and Loki refused the old lines ("entry too far behind") and the burst
+// ("ingestion rate limit exceeded"). Without them the key is the container itself.
 discovery.relabel "containers" {
-  targets = []
+  targets = discovery.docker.containers.targets
 
   rule {
     source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
@@ -20,13 +27,17 @@ discovery.relabel "containers" {
     regex         = "/(.*)"
     target_label  = "container"
   }
+
+  rule {
+    action = "labeldrop"
+    regex  = "__address__|__meta_docker_network_.*|__meta_docker_port_.*|__meta_docker_container_label_com_docker_compose_(config_hash|image|image_builder|replace|depends_on|project_config_files|version)|__meta_docker_container_label_(maintainer|org_opencontainers_.*)"
+  }
 }
 
 loki.source.docker "containers" {
-  host          = "unix:///var/run/docker.sock"
-  targets       = discovery.docker.containers.targets
-  relabel_rules = discovery.relabel.containers.rules
-  forward_to    = [loki.write.loki.receiver]
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  forward_to = [loki.write.loki.receiver]
 }
 
 loki.write "loki" {
