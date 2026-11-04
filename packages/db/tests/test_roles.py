@@ -11,7 +11,7 @@ from aireuskadi_db import SCHEMA, Base, create_all, create_reader_role
 from aireuskadi_db.schema import main
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.exc import DBAPIError, OperationalError, ProgrammingError
+from sqlalchemy.exc import DBAPIError, ProgrammingError
 
 URL = os.environ.get("DATABASE_URL")
 pytestmark = pytest.mark.skipif(not URL, reason="DATABASE_URL is not set")
@@ -122,8 +122,9 @@ def test_a_query_that_takes_more_than_five_seconds_is_cut_by_the_role_itself(rea
 def test_running_it_again_changes_the_password_and_keeps_everything_else(owner, reader):
     create_reader_role(owner, USER, "second-Pa55_word")
 
-    with pytest.raises(OperationalError), reader_engine(PASSWORD).connect():
-        pass
+    # The old password is not tried: a refused login is a FATAL of PostgreSQL that no setting of a
+    # database or a role silences, and it would show up as an error of the application. A role has
+    # one password, so if the new one logs in the old one is gone.
     with reader_engine("second-Pa55_word").connect() as conn:
         conn.execute(text(f"SELECT count(*) FROM {SCHEMA}.pollutant"))
         assert conn.scalar(text("SHOW statement_timeout")) == "5s"

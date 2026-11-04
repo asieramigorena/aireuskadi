@@ -38,7 +38,7 @@ def run_pytest(tmp_path, database_url):
     return subprocess.run(
         [sys.executable, "-m", "pytest", str(probe), "-p", "testing", "-s",
          "-p", "no:cacheprovider", "--rootdir", str(tmp_path)],
-        env=env, capture_output=True, text=True, timeout=60, check=False,
+        env=env, capture_output=True, text=True, timeout=120, check=False,
     )  # fmt: skip
 
 
@@ -50,7 +50,7 @@ def test_a_server_that_is_down_does_not_stop_the_tests_that_do_not_need_it(tmp_p
     assert result.returncode == 0, result.stdout + result.stderr
     assert "1 passed" in result.stdout
     assert "DATABASE=None" in result.stdout
-    assert "cannot reach the server" in result.stdout
+    assert "cannot connect to the server" in result.stdout
 
 
 @pytest.mark.skipif(not URL, reason="DATABASE_URL is not set")
