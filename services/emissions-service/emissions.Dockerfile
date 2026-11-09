@@ -1,8 +1,9 @@
 # Image of the emissions service. Build it with the repository root as context (the service needs
 # packages/db, packages/http, packages/logger and uv.lock, which live outside this folder):
 #   docker compose build emissions-service
-# It is not called "Dockerfile" on purpose, for the same reason as the worker's: deploy-pro.yml and
-# the CI build every file with that name using its own folder as context.
+# It is not called "Dockerfile" on purpose: deploy-pro.yml builds a file with that exact name using its
+# own folder as context, and a file called <name>.Dockerfile in a folder of services/ using the root
+# of the repository as context, which is what this one needs.
 FROM python:3.12-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /usr/local/bin/uv
