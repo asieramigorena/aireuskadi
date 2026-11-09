@@ -1,0 +1,141 @@
+# Production stack, for the Oracle VM. It runs the images that deploy-pro.yml publishes in GitHub
+# Container Registry (tag :pro), never builds anything, and publishes NO port: nothing can reach
+# it from outside. The only way in is an outbound tunnel that runs next to the gateway and talks to
+# http://api-gateway:8000 (see the placeholder at the end).
+#
+# On the VM, in this folder:
+#   cp .env.prod.example .env      # and set the passwords: they are NOT the ones of the laptop
+#   docker login ghcr.io           # with a token that can only read packages
+#   docker compose -f docker-compose.prod.yml up -d
+# Watchtower asks every five minutes for a new :pro image of the three application services and
+# restarts them. The database is not updated by it: a new image of PostgreSQL can change the format
+# of the data, so that one is changed by hand.
+# db-init runs at each `docker compose up -d`, not when Watchtower updates a service: after a release that
+# changes the schema (a new column, a view that is not replaced by itself), run `docker compose -f
+# docker-compose.prod.yml up -d` by hand so that db-init runs again before the new code needs it.
+#
+# To try it on the laptop with images that were built there, without touching the development
+# stack: IMAGE_TAG=<the tag you gave them> docker compose -p other-name -f docker-compose.prod.yml ...
+
+x-logging: &logging
+  # Without a limit the log of a container grows until the disk of the VM is full.
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+x-application: &application
+  restart: unless-stopped
+  logging: *logging
+  labels:
+    # Watchtower only updates what has this label.
+    com.centurylinklabs.watchtower.enable: "true"
+
+services:
+  postgres:
+    image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-database:${IMAGE_TAG:-pro}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set it in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set it in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    logging: *logging
+
+  # Runs once at each start: creates the schema and the read-only role if they are missing, and
+  # changes the password of the role if it changed. The services that read wait for it.
+  db-init:
+    image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-ingestion-worker:${IMAGE_TAG:-pro}
+    entrypoint: ["aireuskadi-db-init"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      POSTGRES_READER_USER: ${POSTGRES_READER_USER:?set it in .env}
+      POSTGRES_READER_PASSWORD: ${POSTGRES_READER_PASSWORD:?set it in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    logging: *logging
+
+  emissions-service:
+    <<: *application
+    image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-emissions-service:${IMAGE_TAG:-pro}
+    environment:
+      # This service only reads: it connects with the read-only role, never with the owner.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_READER_USER}:${POSTGRES_READER_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # The only way in: the page and the API. No port is published: the tunnel reaches it by name.
+  api-gateway:
+    <<: *application
+    image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-api-gateway:${IMAGE_TAG:-pro}
+    environment:
+      EMISSIONS_URL: http://emissions-service:8000
+    depends_on:
+      emissions-service:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # The only writer of the database: it runs the loads when they are due (measurements every hour,
+  # the boundaries and the E-PRTR register every month) and remembers nothing but ingestion_run.
+  ingestion-scheduler:
+    <<: *application
+    image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-ingestion-worker:${IMAGE_TAG:-pro}
+    command: ["schedule"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # Nobody reads the logs of a run with Grafana here: the container does not wait after it.
+      LOG_LINGER_SECONDS: "0"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+
+  # Updates the three services above when a new :pro image appears. It is the maintained fork:
+  # the original containrrr/watchtower was archived in December 2025 and does not work with
+  # Docker 29 or later. It reads the token of GHCR from the docker login of the VM.
+  watchtower:
+    image: nickfedor/watchtower:latest
+    command: ["--interval", "300", "--label-enable", "--cleanup"]
+    environment:
+      DOCKER_CONFIG: /config
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKER_CONFIG_DIR:-/root/.docker}:/config:ro
+    restart: unless-stopped
+    logging: *logging
+
+  # The tunnel is the choice of Asier (issue #11) and is not here yet. Whichever it is, it is one more
+  # container of this file that talks to http://api-gateway:8000 and opens only OUTBOUND connections:
+  #   - Tailscale Funnel (free): the image tailscale/tailscale with TS_AUTHKEY and a serve
+  #     configuration that points to http://api-gateway:8000;
+  #   - Cloudflare Tunnel: the image cloudflare/cloudflared with its token.
+
+volumes:
+  postgres-data:

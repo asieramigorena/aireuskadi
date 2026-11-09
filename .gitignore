@@ -9,8 +9,12 @@ __pycache__/
 node_modules/
 dist/
 
-# Local configuration
+# Local configuration. Every .env* is ignored (.env.prod holds the passwords of production), except
+# the examples, which have none.
 .env
+.env.*
+!.env.example
+!.env.prod.example
 docker-compose.override.yml
 
 docs/
