@@ -2,11 +2,34 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>AirEuskadi</title>
+    <link rel="icon" href="data:," />
   </head>
   <body>
-    <main id="app"></main>
+    <main id="app">
+      <div id="map" role="img" aria-label="3D map of the declared industrial emissions of the Basque Country"></div>
+
+      <header class="caption">
+        <h1>AirEuskadi</h1>
+        <p id="caption"></p>
+        <p id="status" role="status"></p>
+      </header>
+
+      <aside id="panel" aria-label="Details of the unit" hidden></aside>
+
+      <section class="legend" aria-label="Colour of the units">
+        <p>Declared per km² of each unit</p>
+        <div id="legend-bar"></div>
+        <div class="legend-ends"><span>0</span><span id="legend-max"></span></div>
+        <p class="no-data"><span class="swatch"></span>No data</p>
+      </section>
+
+      <footer class="credits">
+        <p>Emissions: E-PRTR register, Open Data Euskadi, CC BY 4.0.</p>
+        <p id="attribution"></p>
+      </footer>
+    </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
