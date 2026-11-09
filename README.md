@@ -40,6 +40,7 @@ uv run --env-file .env python -m ingestion_worker.main measurements --hours 48
 docker compose up -d
 ```
 
+The API is on <http://127.0.0.1:8080/api/v1/> (the gateway, `GATEWAY_PORT` of `.env`).
 Grafana, with the logs and the state of the services, is on <http://127.0.0.1:3000> (user
 `admin`, password `GRAFANA_ADMIN_PASSWORD` of `.env`).
 

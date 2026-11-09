@@ -76,6 +76,32 @@ services:
       start_period: 15s
     restart: unless-stopped
 
+  # The only way in for the browser: it asks the emissions service for an explicit list of routes
+  # and the service itself is never published. The port is only open on this machine.
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/gateway.Dockerfile
+    environment:
+      EMISSIONS_URL: http://emissions-service:8000
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-8080}:8000"
+    depends_on:
+      emissions-service:
+        condition: service_healthy
+    # The check of the gateway itself: it does not ask the emissions service. The image has no curl.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
   # Ingestion worker. Inside a container its logs reach Loki (see the logging profile).
   # Load the boundaries before the E-PRTR register.
   ingestion-worker:
