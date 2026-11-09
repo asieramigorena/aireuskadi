@@ -1,5 +1,5 @@
 # Image of the ingestion worker. Build it with the repository root as context (the worker needs
-# packages/db, packages/logger and uv.lock, which live outside this folder):
+# packages/db, packages/http, packages/logger and uv.lock, which live outside this folder):
 #   docker compose build ingestion-worker
 # It is not called "Dockerfile" on purpose: deploy-pro.yml builds every file with that name using
 # its own folder as context, which would not work for this one.
@@ -16,6 +16,7 @@ WORKDIR /app
 # The workspace needs the pyproject of every Python member, even if only one is installed.
 COPY pyproject.toml uv.lock ./
 COPY packages/db packages/db
+COPY packages/http packages/http
 COPY packages/logger packages/logger
 COPY services/api-gateway/pyproject.toml services/api-gateway/pyproject.toml
 COPY services/emissions-service/pyproject.toml services/emissions-service/pyproject.toml

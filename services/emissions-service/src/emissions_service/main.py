@@ -3,14 +3,13 @@ modules and the database is read-only."""
 
 import os
 
+from aireuskadi_http import install_problem_documents, install_request_log
 from aireuskadi_logger import configure_logging
 from fastapi import FastAPI
 from sqlalchemy import Engine
 
 from emissions_service import facilities, health, pollutants, units
 from emissions_service.database import create_database_engine
-from emissions_service.logs import install_request_log
-from emissions_service.problems import install_problem_documents
 
 
 def create_app(engine: Engine, *, docs: bool = False) -> FastAPI:
@@ -26,7 +25,8 @@ def create_app(engine: Engine, *, docs: bool = False) -> FastAPI:
     )
     app.state.engine = engine
     install_problem_documents(app)
-    install_request_log(app)
+    # The checks of the compose come every few seconds: they are only in the log at DEBUG.
+    install_request_log(app, "emissions_service.access", quiet_paths=(health.HEALTH_PATH,))
     app.include_router(health.router)
     app.include_router(pollutants.router)
     app.include_router(facilities.router)

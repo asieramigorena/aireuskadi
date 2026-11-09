@@ -9,14 +9,12 @@ import time
 
 from fastapi import FastAPI, Request
 
-from emissions_service.health import HEALTH_PATH
 
-_access = logging.getLogger("emissions_service.access")
-
-
-def install_request_log(app: FastAPI) -> None:
-    """One record per request. The query string is not logged: it can carry what the client
-    typed."""
+def install_request_log(app: FastAPI, logger_name: str, quiet_paths: tuple[str, ...] = ()) -> None:
+    """One record per request, written by the logger `logger_name`. The query string is not
+    logged: it can carry what the client typed. The paths in `quiet_paths` (the checks of the
+    compose, which come every few seconds) are only in the log at DEBUG."""
+    access = logging.getLogger(logger_name)
 
     @app.middleware("http")
     async def log_request(request: Request, call_next):
@@ -27,9 +25,8 @@ def install_request_log(app: FastAPI) -> None:
             status = response.status_code
             return response
         finally:
-            # The checks of the compose come every few seconds: they are only in the log at DEBUG.
-            level = logging.DEBUG if request.url.path == HEALTH_PATH else logging.INFO
-            _access.log(
+            level = logging.DEBUG if request.url.path in quiet_paths else logging.INFO
+            access.log(
                 level,
                 "request",
                 extra={

@@ -14,6 +14,7 @@ resolution-markers = [
 members = [
     "aireuskadi",
     "aireuskadi-db",
+    "aireuskadi-http",
     "aireuskadi-logger",
     "api-gateway",
     "emissions-service",
@@ -57,6 +58,25 @@ requires-dist = [
 ]
 
 [[package]]
+name = "aireuskadi-http"
+version = "0.1.0"
+source = { editable = "packages/http" }
+dependencies = [
+    { name = "fastapi" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "fastapi", specifier = ">=0.115" }]
+
+[package.metadata.requires-dev]
+dev = [{ name = "httpx", specifier = ">=0.28.1" }]
+
+[[package]]
 name = "aireuskadi-logger"
 version = "0.1.0"
 source = { editable = "packages/logger" }
@@ -97,6 +117,8 @@ name = "api-gateway"
 version = "0.1.0"
 source = { editable = "services/api-gateway" }
 dependencies = [
+    { name = "aireuskadi-http" },
+    { name = "aireuskadi-logger" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "redis" },
@@ -105,6 +127,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aireuskadi-http", editable = "packages/http" },
+    { name = "aireuskadi-logger", editable = "packages/logger" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "redis", specifier = ">=5" },
@@ -144,6 +168,7 @@ version = "0.1.0"
 source = { editable = "services/emissions-service" }
 dependencies = [
     { name = "aireuskadi-db" },
+    { name = "aireuskadi-http" },
     { name = "aireuskadi-logger" },
     { name = "fastapi" },
     { name = "uvicorn", extra = ["standard"] },
@@ -157,6 +182,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aireuskadi-db", editable = "packages/db" },
+    { name = "aireuskadi-http", editable = "packages/http" },
     { name = "aireuskadi-logger", editable = "packages/logger" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },

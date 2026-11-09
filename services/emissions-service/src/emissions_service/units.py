@@ -4,13 +4,13 @@ import json
 from typing import Annotated, Any, Literal
 
 from aireuskadi_db import District, Municipality, Pollutant, Territory, unit_indicator
+from aireuskadi_http import INVALID_REQUEST, NOT_FOUND
 from fastapi import APIRouter, Path
 from pydantic import BaseModel
 from sqlalchemy import func, null, select
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from emissions_service.database import SessionDep
-from emissions_service.problems import INVALID_REQUEST, NOT_FOUND
 from emissions_service.validation import PollutantParam, YearParam, refuse_year_out_of_range
 
 router = APIRouter()

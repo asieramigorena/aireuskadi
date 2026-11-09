@@ -6,12 +6,12 @@ it. The answer never says why it failed, because that would be the host, the use
 
 from http import HTTPStatus
 
+from aireuskadi_http import problem
 from fastapi import APIRouter
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from emissions_service.database import SessionDep
-from emissions_service.problems import problem
 
 router = APIRouter()
 

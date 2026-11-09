@@ -3,13 +3,13 @@
 from typing import Annotated
 
 from aireuskadi_db import Facility, FacilityEmission, Municipality, Pollutant
+from aireuskadi_http import INVALID_REQUEST, NOT_FOUND
 from fastapi import APIRouter, Path
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from emissions_service.database import SessionDep
-from emissions_service.problems import INVALID_REQUEST, NOT_FOUND
 from emissions_service.validation import PollutantParam, YearParam, refuse_year_out_of_range
 
 router = APIRouter()
