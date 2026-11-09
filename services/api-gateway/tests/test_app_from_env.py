@@ -74,3 +74,32 @@ def test_under_uvicorn_the_starting_application_takes_over_uvicorns_own_log_hand
     (entry,) = [json.loads(line) for line in captured.out.splitlines()]
     assert entry["message"] == "Application startup complete."
     assert captured.err == ""  # no second copy in plain text
+
+
+def test_the_folder_of_the_page_comes_from_the_environment(monkeypatch, web_dir):
+    monkeypatch.setenv("WEB_DIR", str(web_dir))
+
+    response = TestClient(app_from_env()).get("/")
+
+    assert response.status_code == 200
+    assert "AirEuskadi" in response.text
+
+
+def test_without_the_variable_the_gateway_publishes_only_the_api(monkeypatch):
+    monkeypatch.delenv("WEB_DIR", raising=False)
+
+    assert TestClient(app_from_env()).get("/").status_code == 404
+
+
+@pytest.mark.parametrize("problem", ["missing", "no-index"])
+def test_a_folder_that_cannot_be_published_stops_the_start_with_a_message_that_names_it(
+    monkeypatch, tmp_path, problem
+):
+    # Better to fail when it starts than to answer a 404 to everyone later.
+    folder = tmp_path / "nothing" if problem == "missing" else tmp_path
+    monkeypatch.setenv("WEB_DIR", str(folder))
+
+    with pytest.raises(SystemExit) as stopped:
+        app_from_env()
+
+    assert "WEB_DIR" in str(stopped.value)

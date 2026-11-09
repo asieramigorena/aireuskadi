@@ -1,14 +1,18 @@
-# The worker image is built with the repository root as context: keep out what it does not need,
-# and above all the local secrets.
+# The images are built with the repository root as context: keep out what they do not need, and
+# above all the local secrets. The gateway image does need web-client (it compiles the page), but
+# not what is built or installed in it.
 .git
-.env
+# Any .env, also the ones inside a folder (Vite writes VITE_* variables of web-client/.env into the
+# page, and the page is public).
+**/.env
+**/.env.*
 .venv
 **/node_modules
 **/__pycache__
 .pytest_cache
 .ruff_cache
 docs
-web-client
 observability
 database
 services/air-quality-service
+web-client/dist

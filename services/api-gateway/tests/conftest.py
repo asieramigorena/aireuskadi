@@ -41,6 +41,36 @@ def emissions():
     return FakeEmissions()
 
 
+INDEX = (
+    "<!doctype html><title>AirEuskadi</title>"
+    '<script type="module" src="/assets/index-abc123.js"></script>'
+)
+
+
+@pytest.fixture
+def web_dir(tmp_path):
+    """A folder like the one that `npm run build` makes: the page and its assets, and a file that
+    is not part of what is published."""
+    site = tmp_path / "dist"
+    (site / "assets").mkdir(parents=True)
+    (site / "index.html").write_text(INDEX)
+    (site / "assets" / "index-abc123.js").write_text("console.log(1);")
+    (site / "assets" / "index-abc123.css").write_text("body{margin:0}")
+    (site / "assets" / ".hidden").write_text("not an asset")
+    (site / "secret.txt").write_text("in the folder, but not published")
+    (tmp_path / "outside.txt").write_text("outside the folder")
+    return site
+
+
+@pytest.fixture
+def web_client(emissions, web_dir):
+    upstream = httpx.AsyncClient(
+        base_url="http://emissions.internal:8000", transport=httpx.MockTransport(emissions)
+    )
+    with TestClient(create_app(upstream, web_dir=web_dir)) as client:
+        yield client
+
+
 @pytest.fixture
 def client(emissions):
     upstream = httpx.AsyncClient(
