@@ -1,24 +1,20 @@
 """The facilities of the E-PRTR register: the points of the map and the card of each one."""
 
-from datetime import date
 from typing import Annotated
 
 from aireuskadi_db import Facility, FacilityEmission, Municipality, Pollutant
-from fastapi import APIRouter, Path, Query
-from fastapi.exceptions import RequestValidationError
+from fastapi import APIRouter, Path
 from pydantic import BaseModel
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from emissions_service.database import SessionDep
 from emissions_service.problems import INVALID_REQUEST, NOT_FOUND
+from emissions_service.validation import PollutantParam, YearParam, refuse_year_out_of_range
 
 router = APIRouter()
 
 INTEGER_MAX = 2**31 - 1  # the biggest value of a PostgreSQL integer column, like facility.id
-# The codes of core.pollutant: capitals, digits and underscore, up to the 20 of the column.
-POLLUTANT_CODE = r"^[A-Z0-9_]+$"
 
 
 class LocationOut(BaseModel):
@@ -48,26 +44,11 @@ class FacilityOut(BaseModel):
     emissions: list[FacilityEmissionOut]
 
 
-def refuse_year_out_of_range(year: int, session: Session) -> None:
-    """A year that has not ended yet, or is earlier than the first one with emissions, has no
-    data to ask for: refuse it with a 422 instead of answering an empty list."""
-    last = date.today().year - 1
-    if year > last:
-        problem = {"type": "less_than_equal", "msg": f"Input should be at most {last}"}
-    else:
-        # Only now is the database asked: a year that has not ended needs no query to refuse.
-        first = session.scalar(select(func.min(FacilityEmission.year)))
-        if first is None or year >= first:
-            return
-        problem = {"type": "greater_than_equal", "msg": f"Input should be at least {first}"}
-    raise RequestValidationError([{**problem, "loc": ("query", "year"), "input": year}])
-
-
 @router.get("/facilities/points", responses=INVALID_REQUEST)
 def facility_points(
     session: SessionDep,
-    pollutant: Annotated[str, Query(max_length=20, pattern=POLLUTANT_CODE)],
-    year: Annotated[int, Query(ge=1)],
+    pollutant: PollutantParam,
+    year: YearParam,
 ) -> list[list[float]]:
     """[lon, lat, kg] of each facility that declared the pollutant in the year, the biggest
     emitter first. The year has to be one that has ended and not earlier than the first year
