@@ -44,3 +44,45 @@ export async function addStation(db: Db, station: NewStation): Promise<number> {
   );
   return rows[0].id;
 }
+
+export async function addPollutant(db: Db, code: string) {
+  await db.query("INSERT INTO core.pollutant (code, name) VALUES ($1, $1) ON CONFLICT DO NOTHING", [code]);
+}
+
+/** A WHO guideline, always in ug/m3, as the table stores it. */
+export async function addGuideline(db: Db, pollutant: string, period: string, valueUgm3: number, edition = 2021) {
+  await addPollutant(db, pollutant);
+  await db.query(
+    "INSERT INTO core.who_guideline (pollutant_code, averaging_period, edition, value_ugm3) VALUES ($1, $2, $3, $4)",
+    [pollutant, period, edition, valueUgm3],
+  );
+}
+
+export interface Reading {
+  /** ISO time in UTC. */
+  ts: string;
+  value: number;
+  unit?: string;
+  /** "1h" (the hourly value, the default) or "8h" (the running mean of 8 hours). */
+  period?: string;
+}
+
+export async function addReadings(db: Db, stationId: number, pollutant: string, readings: Reading[]) {
+  await addPollutant(db, pollutant);
+  for (const r of readings) {
+    await db.query(
+      "INSERT INTO core.measurement (station_id, pollutant_code, ts, averaging_period, value, unit) VALUES ($1, $2, $3, $4, $5, $6)",
+      [stationId, pollutant, r.ts, r.period ?? "1h", r.value, r.unit ?? "µg/m3"],
+    );
+  }
+}
+
+/** `count` hourly values that end at `endIso` (included), all equal to `value`. */
+export function hourly(endIso: string, count: number, value: number, unit = "µg/m3"): Reading[] {
+  const end = Date.parse(endIso);
+  return Array.from({ length: count }, (_, i) => ({
+    ts: new Date(end - (count - 1 - i) * 3_600_000).toISOString(),
+    value,
+    unit,
+  }));
+}

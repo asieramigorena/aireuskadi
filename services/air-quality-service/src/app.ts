@@ -5,6 +5,7 @@ import Fastify, { LogController } from "fastify";
 import type { Db } from "./db.js";
 import { LOGGER, loggerOptions, normalizeLevel } from "./logging.js";
 import { errorHandler, frameworkErrors, notFoundHandler, problem } from "./problems.js";
+import { latestRoutes } from "./latest.js";
 import { stationRoutes } from "./stations.js";
 
 export const HEALTH_PATH = "/health";
@@ -63,6 +64,7 @@ export async function buildApp({ db, logStream, logLevel }: Options) {
   });
 
   await app.register(stationRoutes, { db });
+  await app.register(latestRoutes, { db });
 
   return app;
 }

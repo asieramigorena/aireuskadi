@@ -50,3 +50,39 @@ export function frameworkErrors(error: FastifyError, _request: unknown, reply: F
   const status = error.statusCode && error.statusCode < 500 ? error.statusCode : 400;
   return problem(reply, status, STATUS_CODES[status] ?? "Error");
 }
+
+// How the OpenAPI document describes the errors: as problem documents, which is what is sent.
+const problemMembers = {
+  type: { type: "string" },
+  title: { type: "string" },
+  status: { type: "integer" },
+  detail: { type: "string" },
+} as const;
+
+const validationProblem = {
+  type: "object",
+  required: ["type", "title", "status", "detail", "errors"],
+  properties: {
+    ...problemMembers,
+    errors: {
+      type: "array",
+      items: {
+        type: "object",
+        required: ["loc", "msg", "type"],
+        properties: {
+          loc: { type: "array", items: { type: ["string", "integer"] } },
+          msg: { type: "string" },
+          type: { type: "string" },
+        },
+      },
+    },
+  },
+} as const;
+
+/** For the routes that take parameters: the 422 that they can answer. */
+export const INVALID_REQUEST = {
+  422: {
+    description: "The request has invalid or missing parameters.",
+    content: { "application/problem+json": { schema: validationProblem } },
+  },
+} as const;

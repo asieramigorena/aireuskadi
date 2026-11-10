@@ -23,20 +23,22 @@ interface StationRow {
   geometry: { type: string; coordinates: number[] } | null;
 }
 
+// A station without a position is listed with null, not left out: it still has data.
+export const pointGeometry = {
+  type: "object",
+  nullable: true,
+  properties: {
+    type: { type: "string", enum: ["Point"] },
+    coordinates: { type: "array", items: { type: "number" } },
+  },
+} as const;
+
 const feature = {
   type: "object",
   required: ["type", "geometry", "properties"],
   properties: {
     type: { type: "string", enum: ["Feature"] },
-    // A station without a position is listed with null, not left out: it still has data.
-    geometry: {
-      type: "object",
-      nullable: true,
-      properties: {
-        type: { type: "string", enum: ["Point"] },
-        coordinates: { type: "array", items: { type: "number" } },
-      },
-    },
+    geometry: pointGeometry,
     properties: {
       type: "object",
       required: ["id", "code", "name", "area_type", "municipality_code", "municipality_name"],
