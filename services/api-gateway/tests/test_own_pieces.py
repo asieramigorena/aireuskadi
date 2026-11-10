@@ -19,6 +19,11 @@ def test_the_interactive_documentation_is_off_unless_it_is_asked_for(client):
     assert client.get("/redoc").status_code == 404
 
 
+def test_the_description_of_the_routes_is_not_published_unless_it_is_asked_for(client):
+    # The browser has no use for it, and on the internet it is the list of what can be probed.
+    assert client.get("/openapi.json").status_code == 404
+
+
 def test_each_request_leaves_one_record_without_the_query_string_or_the_headers(
     client, emissions, caplog
 ):

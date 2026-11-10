@@ -5,8 +5,11 @@ files that the build names inside `/assets`. A file of the folder that is not in
 published, and a name cannot walk out of the folder.
 """
 
+import httpx
 import pytest
+from api_gateway.main import create_app
 from conftest import INDEX
+from fastapi.testclient import TestClient
 
 
 @pytest.mark.parametrize("path", ["/", "/unit/01036", "/unit/9901", "/unit/48"])
@@ -142,8 +145,12 @@ def test_the_api_and_the_check_of_the_gateway_work_the_same_with_the_page(web_cl
     assert web_client.get("/docs").status_code == 404
 
 
-def test_the_pages_are_not_in_the_openapi_document_of_the_gateway(web_client):
-    paths = web_client.get("/openapi.json").json()["paths"]
+def test_the_pages_are_not_in_the_openapi_document_of_the_gateway(emissions, web_dir):
+    upstream = httpx.AsyncClient(
+        base_url="http://emissions.internal:8000", transport=httpx.MockTransport(emissions)
+    )
+    with TestClient(create_app(upstream, docs=True, web_dir=web_dir)) as client:
+        paths = client.get("/openapi.json").json()["paths"]
 
     assert not any(p == "/" or p.startswith(("/unit", "/assets")) for p in paths)
 

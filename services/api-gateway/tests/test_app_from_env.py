@@ -40,7 +40,10 @@ def test_the_wait_for_the_service_is_short_and_a_redirect_is_not_followed():
 def test_the_environment_switches_the_documentation_on(monkeypatch, value):
     monkeypatch.setenv("DOCS_ENABLED", value)
 
-    assert TestClient(app_from_env()).get("/docs").status_code == 200
+    client = TestClient(app_from_env())
+
+    assert client.get("/docs").status_code == 200
+    assert client.get("/openapi.json").status_code == 200
 
 
 @pytest.mark.parametrize("value", [None, "", "0", "false", "no", "enabled"])
@@ -50,7 +53,10 @@ def test_anything_else_in_the_environment_leaves_it_off(monkeypatch, value):
     else:
         monkeypatch.setenv("DOCS_ENABLED", value)
 
-    assert TestClient(app_from_env()).get("/docs").status_code == 404
+    client = TestClient(app_from_env())
+
+    assert client.get("/docs").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
 
 
 def test_starting_the_application_switches_the_logs_to_json(capsys):
