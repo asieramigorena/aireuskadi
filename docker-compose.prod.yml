@@ -1,11 +1,13 @@
 # Production stack, for the Oracle VM. It runs the images that deploy-pro.yml publishes in GitHub
 # Container Registry (tag :pro), never builds anything, and publishes NO port: nothing can reach
-# it from outside. The only way in is an outbound tunnel that runs next to the gateway and talks to
-# http://api-gateway:8000 (see the placeholder at the end).
+# it from outside. The way in is an optional outbound tunnel that runs next to the gateway and talks
+# to http://api-gateway:8000 (the `tunnel` service at the end, only with the profile `tunnel`).
 #
 # On the VM, in this folder:
 #   cp .env.prod.example .env      # and set the passwords: they are NOT the ones of the laptop
 #   docker login ghcr.io           # with a token that can only read packages
+#   mkdir tunnel; paste tunnel/serve.json   # (repository is private) and set COMPOSE_PROFILES=tunnel and
+#                                  # TS_AUTHKEY in .env to turn the tunnel on; without them it does not start
 #   docker compose -f docker-compose.prod.yml up -d
 # Watchtower asks every five minutes for a new :pro image of the three application services and
 # restarts them. The database is not updated by it: a new image of PostgreSQL can change the format
@@ -131,11 +133,29 @@ services:
     restart: unless-stopped
     logging: *logging
 
-  # The tunnel is the choice of Asier (issue #11) and is not here yet. Whichever it is, it is one more
-  # container of this file that talks to http://api-gateway:8000 and opens only OUTBOUND connections:
-  #   - Tailscale Funnel (free): the image tailscale/tailscale with TS_AUTHKEY and a serve
-  #     configuration that points to http://api-gateway:8000;
-  #   - Cloudflare Tunnel: the image cloudflare/cloudflared with its token.
+  # The way in: Tailscale Funnel (issue #11). It opens only an outbound connection, publishes no port
+  # and shows ONLY the gateway. It is optional: it starts only with COMPOSE_PROFILES=tunnel in .env,
+  # and needs the folder tunnel/ (serve.json) next to this file and TS_AUTHKEY for the first start. If
+  # the same tunnel still runs on the laptop, stop it first: two machines cannot share the name.
+  tunnel:
+    image: tailscale/tailscale:v1.104.4
+    profiles: [tunnel]
+    hostname: aireuskadi
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      # The folder, not the file: a missing or replaced single file would break the mount.
+      - ./tunnel:/config:ro
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
 
 volumes:
   postgres-data:
+  tailscale-state:

@@ -102,6 +102,30 @@ services:
       start_period: 15s
     restart: unless-stopped
 
+  # The way in from the internet while the VM does not exist: Tailscale Funnel, from a container.
+  # It only starts on request (`docker compose --profile tunnel up -d tunnel`), opens only an
+  # outbound connection, publishes no port, and shows ONLY the gateway at
+  # https://aireuskadi.<your tailnet>.ts.net (see tunnel/serve.json). Stop it and nothing is exposed.
+  # TS_AUTHKEY is only read the first time: afterwards the identity is in the tailscale-state volume.
+  # The name is shared with the VM: stop one tunnel before starting the other.
+  tunnel:
+    image: tailscale/tailscale:v1.104.4
+    profiles: [tunnel]
+    hostname: aireuskadi
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      # The folder, not the file: a missing or replaced single file would break the mount.
+      - ./tunnel:/config:ro
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
   # Ingestion worker. Inside a container its logs reach Loki (see the logging profile).
   # Load the boundaries before the E-PRTR register.
   ingestion-worker:
@@ -196,4 +220,5 @@ volumes:
   prometheus-data:
   alloy-data:
   grafana-data:
+  tailscale-state:
   
