@@ -49,6 +49,11 @@ The API is on <http://127.0.0.1:8080/api/v1/> (the gateway, `GATEWAY_PORT` of `.
 Grafana, with the logs and the state of the services, is on <http://127.0.0.1:3000> (user
 `admin`, password `GRAFANA_ADMIN_PASSWORD` of `.env`).
 
+Optional: to show your own copy on the internet, `tunnel/` has a Tailscale Funnel that publishes only
+the gateway. Put an auth key in `TS_AUTHKEY` of `.env` and run
+`docker compose --profile tunnel up -d tunnel` (`docker compose stop tunnel` turns it off).
+Nothing else needs it.
+
 ## Credits
 
 The data is open and published under
