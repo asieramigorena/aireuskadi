@@ -6,7 +6,7 @@
 # On the VM, in this folder:
 #   cp .env.prod.example .env      # and set the passwords: they are NOT the ones of the laptop
 #   docker login ghcr.io           # with a token that can only read packages
-#   mkdir tunnel; paste tunnel/serve.json   # (repository is private) and set COMPOSE_PROFILES=tunnel and
+#   mkdir tunnel; paste tunnel/serve.json   # (repository is private; chmod 644 it) and set COMPOSE_PROFILES=tunnel and
 #                                  # TS_AUTHKEY in .env to turn the tunnel on; without them it does not start
 #   docker compose -f docker-compose.prod.yml up -d
 # Watchtower asks every five minutes for a new :pro image of the three application services and
@@ -91,6 +91,8 @@ services:
     image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-api-gateway:${IMAGE_TAG:-pro}
     environment:
       EMISSIONS_URL: http://emissions-service:8000
+    # It also joins `edge`, the only network the tunnel is on.
+    networks: [default, edge]
     depends_on:
       emissions-service:
         condition: service_healthy
@@ -153,8 +155,21 @@ services:
     depends_on:
       api-gateway:
         condition: service_healthy
+    # Only what the tunnel needs: no extra permissions, a read-only filesystem, and a network of
+    # its own shared with the gateway only, so it cannot reach the database or Grafana by name.
+    read_only: true
+    # /var/run/tailscale: where the CLI of the container looks for the socket (it is a link to /tmp).
+    tmpfs:
+      - /tmp
+      - /var/run/tailscale
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [edge]
     restart: unless-stopped
     logging: *logging
+
+networks:
+  edge:
 
 volumes:
   postgres-data:

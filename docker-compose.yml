@@ -86,6 +86,8 @@ services:
       EMISSIONS_URL: http://emissions-service:8000
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-8080}:8000"
+    # It also joins `edge`, the only network the tunnel is on.
+    networks: [default, edge]
     depends_on:
       emissions-service:
         condition: service_healthy
@@ -124,6 +126,16 @@ services:
     depends_on:
       api-gateway:
         condition: service_healthy
+    # Only what the tunnel needs: no extra permissions, a read-only filesystem, and a network of
+    # its own shared with the gateway only, so it cannot reach the database or Grafana by name.
+    read_only: true
+    # /var/run/tailscale: where the CLI of the container looks for the socket (it is a link to /tmp).
+    tmpfs:
+      - /tmp
+      - /var/run/tailscale
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [edge]
     restart: unless-stopped
 
   # Ingestion worker. Inside a container its logs reach Loki (see the logging profile).
@@ -213,6 +225,9 @@ services:
       - loki
       - prometheus
     restart: unless-stopped
+
+networks:
+  edge:
 
 volumes:
   postgres-data:
