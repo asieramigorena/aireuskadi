@@ -6,17 +6,20 @@ table, recreate the database (``docker compose down -v``) and run it again.
 
 Command line: ``aireuskadi-db-init`` reads the database URL from ``DATABASE_URL``. If
 ``POSTGRES_READER_USER`` and ``POSTGRES_READER_PASSWORD`` are set it also creates (or updates) the
-read-only role of the services that only read, see ``roles.py``.
+read-only role of the services that only read, see ``roles.py``. It always loads the WHO guideline
+values (``who.py``) and refreshes the view that divides by them.
 """
 
 import os
 import sys
 
 from sqlalchemy import Engine, create_engine, text
+from sqlalchemy.orm import Session
 
 from aireuskadi_db.base import SCHEMA, Base
 from aireuskadi_db.roles import create_reader_role
 from aireuskadi_db.views import UNIT_INDICATOR_DDL
+from aireuskadi_db.who import seed_who_guidelines
 
 
 def create_all(engine: Engine) -> None:
@@ -45,6 +48,12 @@ def main() -> None:
     engine = create_engine(url)
     create_all(engine)
     print(f"Schema {SCHEMA} is ready")
+
+    # The reference values of the WHO, and the view that divides by them.
+    with Session(engine) as session, session.begin():
+        seed_who_guidelines(session)
+        session.execute(text(f"REFRESH MATERIALIZED VIEW {SCHEMA}.unit_indicator"))
+    print("WHO guidelines (2021) are loaded")
 
     # The read-only role of the services that only read. Both variables or neither: half of the
     # credentials is a mistake, and guessing the other half would be worse than stopping.

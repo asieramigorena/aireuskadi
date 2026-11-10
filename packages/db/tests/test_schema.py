@@ -23,6 +23,7 @@ from aireuskadi_db import (
     Territory,
     WhoGuideline,
     create_all,
+    seed_who_guidelines,
 )
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
@@ -271,6 +272,16 @@ def test_the_who_ratio_compares_values_in_the_same_unit(session):
     guideline(session, "T_NO2", "40")
 
     assert who_ratios(session) == {"T_CO": 0.5, "T_NO2": 0.5}
+
+
+def test_the_seeded_who_values_are_the_ones_the_view_divides_by(session):
+    # The view reads the guideline whose period is "annual": the seed has to use that exact word.
+    seed_who_guidelines(session)
+    station = add_station(session)
+    measure(session, station, "NO2", [20.0, 20.0], "µg/m3")  # the WHO annual value is 10
+    measure(session, station, "O3", [50.0, 50.0], "µg/m3")  # no annual value in 2021
+
+    assert who_ratios(session) == {"NO2": 2.0, "O3": None}
 
 
 def test_the_8_hour_mean_does_not_count_in_the_annual_mean_of_the_hourly_values(session):

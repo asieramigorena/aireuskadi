@@ -18,6 +18,7 @@ from aireuskadi_db.models import (
 from aireuskadi_db.roles import create_reader_role
 from aireuskadi_db.schema import create_all
 from aireuskadi_db.views import UNIT_INDICATOR_DDL, unit_indicator
+from aireuskadi_db.who import seed_who_guidelines
 
 __all__ = [
     "SCHEMA",
@@ -37,5 +38,6 @@ __all__ = [
     "WhoGuideline",
     "create_all",
     "create_reader_role",
+    "seed_who_guidelines",
     "unit_indicator",
 ]
