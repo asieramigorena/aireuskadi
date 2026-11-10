@@ -5,9 +5,10 @@
 #
 # On the VM, in this folder:
 #   cp .env.prod.example .env      # and set the passwords: they are NOT the ones of the laptop
-#   docker login ghcr.io           # with a token that can only read packages
-#   mkdir tunnel; paste tunnel/serve.json   # (repository is private; chmod 644 it) and set COMPOSE_PROFILES=tunnel and
-#                                  # TS_AUTHKEY in .env to turn the tunnel on; without them it does not start
+#   docker login ghcr.io           # only if the packages of the images are private: with a token that
+#                                  # can only read packages. Public packages need no login
+#   tunnel/serve.json              # needed only for the tunnel (it comes with the repository; chmod 644 it):
+#                                  # set COMPOSE_PROFILES=tunnel and TS_AUTHKEY in .env to turn it on
 #   docker compose -f docker-compose.prod.yml up -d
 # Watchtower asks every five minutes for a new :pro image of the three application services and
 # restarts them. The database is not updated by it: a new image of PostgreSQL can change the format
@@ -123,7 +124,8 @@ services:
 
   # Updates the three services above when a new :pro image appears. It is the maintained fork:
   # the original containrrr/watchtower was archived in December 2025 and does not work with
-  # Docker 29 or later. It reads the token of GHCR from the docker login of the VM.
+  # Docker 29 or later. If the images are private it reads the token of GHCR from the docker login
+  # of the VM; with public images it needs none.
   watchtower:
     image: nickfedor/watchtower:latest
     command: ["--interval", "300", "--label-enable", "--cleanup"]
