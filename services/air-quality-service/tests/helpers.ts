@@ -30,3 +30,16 @@ export function logSink() {
     records: () => lines.map((line) => JSON.parse(line) as Record<string, unknown>),
   };
 }
+
+/** A database that answers each query with the next list of rows, and remembers the questions. */
+export function scriptedDb(answers: unknown[][]): Db & { asked: { text: string; params?: unknown[] }[] } {
+  const asked: { text: string; params?: unknown[] }[] = [];
+  let next = 0;
+  return {
+    asked,
+    async query(text: string, params?: unknown[]) {
+      asked.push({ text, params });
+      return { rows: (answers[next++] ?? []) as never[] };
+    },
+  };
+}

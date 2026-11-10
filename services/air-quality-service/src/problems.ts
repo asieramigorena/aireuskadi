@@ -86,3 +86,22 @@ export const INVALID_REQUEST = {
     content: { "application/problem+json": { schema: validationProblem } },
   },
 } as const;
+
+const notFoundProblem = {
+  type: "object",
+  required: ["type", "title", "status", "detail"],
+  properties: problemMembers,
+} as const;
+
+/** For the routes that look something up: the 404 that they can answer. */
+export const NOT_FOUND = {
+  404: {
+    description: "What was asked for does not exist.",
+    content: { "application/problem+json": { schema: notFoundProblem } },
+  },
+} as const;
+
+/** A 422 for a rule that a JSON schema cannot say (a range that is too long): same body as the others. */
+export function invalidParameter(reply: FastifyReply, loc: (string | number)[], msg: string, type: string) {
+  return problem(reply, 422, "The request has invalid or missing parameters.", { errors: [{ loc, msg, type }] });
+}

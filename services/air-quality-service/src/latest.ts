@@ -4,6 +4,7 @@ import type { FastifyInstance } from "fastify";
 import type { Db } from "./db.js";
 import { INVALID_REQUEST } from "./problems.js";
 import { ATTRIBUTION, pointGeometry } from "./stations.js";
+import { KNOWN_UNIT, MIN_HOURS_FOR_A_MEAN, TO_UGM3 } from "./units.js";
 
 // The WHO 2021 guidelines have no value for one hour. An hourly value is not compared with a
 // guideline of another period (a bad hour is not an exceeded day), so each pollutant is compared
@@ -15,12 +16,6 @@ import { ATTRIBUTION, pointGeometry } from "./stations.js";
 // allows a few days a year over it) and the 8-hour one on the highest 8-hour mean of the day, so a
 // ratio over 1 here does not say that the guideline was exceeded. The 24-hour guideline is the one
 // used when a pollutant has both; the most recent edition wins.
-export const MIN_SAMPLES_24H = 18;
-
-// Every value in ug/m3, with its own unit; a value in a unit that is not known is left out of the
-// means instead of guessed (CO is published in mg/m3, the others in ug/m3).
-const TO_UGM3 = "CASE m.unit WHEN 'µg/m3' THEN 1 WHEN 'mg/m3' THEN 1000 WHEN 'ng/m3' THEN 0.001 END";
-const KNOWN_UNIT = "m.unit IN ('µg/m3', 'mg/m3', 'ng/m3')";
 
 const LATEST = `
   WITH guideline AS (
@@ -93,7 +88,7 @@ function ratio(row: Row): number | null {
   const mean = number(row.who_mean_ugm3);
   const guideline = number(row.who_guideline_ugm3);
   if (mean === null || guideline === null || guideline <= 0) return null;
-  if (row.who_period === "24h" && (number(row.who_samples) ?? 0) < MIN_SAMPLES_24H) return null;
+  if (row.who_period === "24h" && (number(row.who_samples) ?? 0) < MIN_HOURS_FOR_A_MEAN) return null;
   return Math.round((mean / guideline) * 10_000) / 10_000;
 }
 
