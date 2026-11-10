@@ -1,0 +1,29 @@
+# uv workspace root. It is not a package itself: each member below is one service
+# (or the shared data model) with its own pyproject.toml.
+[project]
+name = "aireuskadi"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*", "services/*"]
+# Node.js service, not a Python package.
+exclude = ["services/air-quality-service"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+# Every run of pytest, also of one folder, starts from the root of the repository and loads the plugin
+# that points the tests to a database of their own (packages/db/tests/testing.py). Without
+# a section here pytest would take the pyproject.toml of the folder and the plugin would not be loaded.
+[tool.pytest.ini_options]
+minversion = "8"
+pythonpath = ["packages/db/tests"]
+addopts = "-p testing"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100

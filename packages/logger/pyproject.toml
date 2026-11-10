@@ -1,0 +1,10 @@
+[project]
+name = "aireuskadi-logger"
+version = "0.1.0"
+description = "AirEuskadi JSON logging shared by the Python services: one JSON object per line on standard output"
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

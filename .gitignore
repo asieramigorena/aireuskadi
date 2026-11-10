@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node.js
+node_modules/
+dist/
+
+# Local configuration. Every .env* is ignored (.env.prod holds the passwords of production), except
+# the examples, which have none.
+.env
+.env.*
+!.env.example
+!.env.prod.example
+docker-compose.override.yml
+
+docs/
+.vscode/
