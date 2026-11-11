@@ -50,6 +50,23 @@ describe("buildLayers", () => {
     expect(hexagons.getColorWeight(POINTS[1])).toBe(500);
   });
 
+  test("the radius of the hexagons is the one that is given, and the columns are as tall as before for their width", () => {
+    const [, big] = buildLayers(POINTS, UNITS, vi.fn(), 1500).map(propsOf);
+    const [, small] = buildLayers(POINTS, UNITS, vi.fn(), 300).map(propsOf);
+
+    expect(big.radius).toBe(1500);
+    expect(big.elevationRange).toEqual([0, 6000]);
+    // A smaller hexagon with a column as tall as a big one would be a needle.
+    expect(small.radius).toBe(300);
+    expect(small.elevationRange).toEqual([0, 1200]);
+  });
+
+  test("without a radius the hexagons are the biggest ones, as before", () => {
+    const [, hexagons] = buildLayers(POINTS, UNITS, vi.fn()).map(propsOf);
+
+    expect(hexagons.radius).toBe(1500);
+  });
+
   test("a unit is painted by its density against the biggest one, and one without data is grey", () => {
     const [units] = buildLayers(POINTS, UNITS, vi.fn()).map(propsOf);
     const [a, b, c, d] = UNITS.features;

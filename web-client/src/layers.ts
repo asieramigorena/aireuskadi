@@ -3,6 +3,7 @@
 import { HexagonLayer } from "@deck.gl/aggregation-layers";
 import type { Layer } from "@deck.gl/core";
 import { GeoJsonLayer } from "@deck.gl/layers";
+import { HEXAGON_MAX_RADIUS } from "./hexagons";
 import { colorFor, maxDensity } from "./scale";
 import type { Point, UnitCollection, UnitFeature } from "./types";
 
@@ -19,6 +20,7 @@ export function buildLayers(
   points: Point[],
   units: UnitCollection | null,
   onUnit: (code: string) => void,
+  hexRadius: number = HEXAGON_MAX_RADIUS,
 ): Layer[] {
   const layers: Layer[] = [];
 
@@ -56,9 +58,10 @@ export function buildLayers(
       elevationAggregation: "SUM",
       colorAggregation: "SUM",
       extruded: true,
-      radius: 1500,
+      radius: hexRadius,
       coverage: 0.85,
-      elevationRange: [0, 6000],
+      // As tall as four radii: a smaller hexagon with a column as tall as a big one would be a needle.
+      elevationRange: [0, hexRadius * 4],
       colorRange: HEXAGON_COLORS,
       upperPercentile: 100,
       pickable: false,

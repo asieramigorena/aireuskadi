@@ -153,7 +153,9 @@ body {
   overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  padding: 1.25rem 1rem 1.25rem 1.4rem;
+  /* No padding on top: the header has its own and stays in place while the rest is scrolled. */
+  --panel-pad-top: 1.25rem;
+  padding: 0 1rem 1.25rem 1.4rem;
   background: var(--paper);
   color: var(--ink);
   border-radius: 6px;
@@ -166,11 +168,18 @@ body {
   display: none;
 }
 
+/* The name of the unit and the button to close stay in view while the table is scrolled: on a
+ * phone the sheet is short, and having to scroll back up to close it was the way to lose them. */
 #panel header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+  padding: var(--panel-pad-top) 0 0.6rem;
+  background: var(--paper);
 }
 
 #panel h2 {
@@ -198,7 +207,7 @@ body {
 }
 
 #panel .meta {
-  margin: 0.5rem 0 1.25rem;
+  margin: 0 0 1.25rem;
   color: #4a5f66;
 }
 
@@ -299,7 +308,8 @@ body {
     bottom: calc(max(0.4rem, env(safe-area-inset-bottom)) + 2.3rem);
     width: auto;
     max-height: 45%;
-    padding: 1rem 0.8rem 1rem 1rem;
+    --panel-pad-top: 1rem;
+    padding: 0 0.8rem 1rem 1rem;
     animation-name: sheet-in;
   }
 

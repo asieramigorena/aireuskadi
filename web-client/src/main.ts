@@ -2,6 +2,7 @@
 import "../styles/style.css";
 import { ApiError, createApi } from "./api";
 import { errorText, formatDensity, mapCaption } from "./format";
+import { HEXAGON_MAX_RADIUS, hexRadiusForZoom } from "./hexagons";
 import { buildLayers } from "./layers";
 import { levelForZoom } from "./levels";
 import { createMap } from "./map";
@@ -21,6 +22,8 @@ let selection: Selection | null = null;
 let level: Level;
 let points: Point[] = [];
 let units: UnitCollection | null = null;
+// The size of the hexagons follows the zoom (hexagons.ts); the map is drawn again when it changes.
+let hexRadius = HEXAGON_MAX_RADIUS;
 
 // The units of a level and a selection are asked for once: going back and forth between zooms
 // does not ask again.
@@ -29,6 +32,11 @@ let mapLoad = new AbortController();
 let cardLoad = new AbortController();
 
 const map = createMap(element<HTMLDivElement>("map"), (zoom) => {
+  const radius = hexRadiusForZoom(zoom);
+  if (radius !== hexRadius) {
+    hexRadius = radius;
+    draw();
+  }
   const wanted = levelForZoom(zoom);
   if (wanted !== level && selection) {
     level = wanted;
@@ -36,13 +44,14 @@ const map = createMap(element<HTMLDivElement>("map"), (zoom) => {
   }
 });
 level = levelForZoom(map.initialZoom);
+hexRadius = hexRadiusForZoom(map.initialZoom);
 
 function say(text: string) {
   status.textContent = text;
 }
 
 function draw() {
-  map.setLayers(buildLayers(points, units, (code) => router.navigate(unitUrl(code, selection!))));
+  map.setLayers(buildLayers(points, units, (code) => router.navigate(unitUrl(code, selection!)), hexRadius));
   const max = units ? maxDensity(units.features) : 0;
   element("legend-max").textContent = formatDensity(max);
   element("attribution").textContent = units?.attribution ?? "";
