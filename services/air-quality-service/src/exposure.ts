@@ -4,17 +4,7 @@ import type { FastifyInstance } from "fastify";
 import type { Db } from "./db.js";
 import { INVALID_REQUEST, NOT_FOUND, invalidParameter, problem } from "./problems.js";
 import { ATTRIBUTION } from "./stations.js";
-import { KNOWN_UNIT, MIN_COVERAGE, TO_UGM3 } from "./units.js";
-
-// The code of a unit says what it is, as in the emissions service: 2 digits a territory, 4 a
-// district, 5 a municipality. Only the municipalities have stations; adding up the stations of a
-// district or a territory is an open decision (issue #33), so they answer "not measured" and not a
-// number that nobody has decided how to calculate.
-const UNITS = {
-  2: { level: "territory", lookup: "SELECT name FROM core.territory WHERE code = $1" },
-  4: { level: "district", lookup: "SELECT name FROM core.district WHERE code = $1" },
-  5: { level: "municipality", lookup: "SELECT name FROM core.municipality WHERE ine_code = $1" },
-} as const;
+import { KNOWN_UNIT, MIN_COVERAGE, TO_UGM3, UNITS, UNIT_CODE } from "./units.js";
 
 // The mean is the one of unit_indicator (which the map uses): the average of every hourly value
 // of the stations of the municipality, each in ug/m3 with its own unit. The coverage is how many
@@ -95,7 +85,7 @@ export async function exposureRoutes(app: FastifyInstance, { db }: { db: Db }) {
           type: "object",
           required: ["code"],
           properties: {
-            code: { type: "string", pattern: "^([0-9]{2}|[0-9]{4}|[0-9]{5})$", description: "Code of the unit: 2 digits a territory, 4 a district, 5 a municipality." },
+            code: { type: "string", pattern: UNIT_CODE, description: "Code of the unit: 2 digits a territory, 4 a district, 5 a municipality." },
           },
         },
         querystring: {

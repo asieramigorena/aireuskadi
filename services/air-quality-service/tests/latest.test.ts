@@ -386,7 +386,8 @@ test("the code of the pollutant is passed to the database as a parameter, never 
   await app.inject("/stations/latest?pollutant=NO2");
 
   expect(asked).toHaveLength(1);
-  expect(asked[0].params).toEqual(["NO2"]);
+  // The pollutants go as a list and no municipality (null) means every station.
+  expect(asked[0].params).toEqual([["NO2"], null]);
   expect(asked[0].text).not.toContain("NO2");
 });
 

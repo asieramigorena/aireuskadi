@@ -1,5 +1,6 @@
 // GET /stations/latest: the latest hourly value of each station for a pollutant, and how it
-// compares with the WHO guideline that has the same averaging period.
+// compares with the WHO guideline that has the same averaging period. The query and the way a
+// value is read (`LATEST`, `reading`) are also what the stations of a unit use (unit-stations.ts).
 import type { FastifyInstance } from "fastify";
 import type { Db } from "./db.js";
 import { INVALID_REQUEST } from "./problems.js";
@@ -17,56 +18,60 @@ import { KNOWN_UNIT, MIN_HOURS_FOR_A_MEAN, TO_UGM3 } from "./units.js";
 // ratio over 1 here does not say that the guideline was exceeded. The 24-hour guideline is the one
 // used when a pollutant has both; the most recent edition wins.
 
-const LATEST = `
-  WITH guideline AS (
-    SELECT averaging_period AS period, value_ugm3
-    FROM core.who_guideline
-    WHERE pollutant_code = $1 AND averaging_period IN ('24h', '8h')
-    ORDER BY edition DESC, (averaging_period <> '24h')
-    LIMIT 1
-  )
+// $1 is the list of pollutants and $2 the municipality ("null": every station). A station with no
+// value of a pollutant has no row for it.
+export const LATEST = `
   SELECT s.id, s.code, s.name, s.municipality_code, ST_AsGeoJSON(s.geom, 6)::json AS geometry,
-         l.ts, l.value, l.unit,
+         p.code AS pollutant, l.ts, l.value, l.unit,
          g.period AS who_period, g.value_ugm3 AS who_guideline_ugm3,
          CASE g.period WHEN '24h' THEN d.mean_ugm3 WHEN '8h' THEN e.value_ugm3 END AS who_mean_ugm3,
          CASE g.period WHEN '24h' THEN d.samples END AS who_samples
   FROM core.station s
-  -- One probe of the primary key (station, pollutant, time) per station, backwards: the cost does
-  -- not grow with the history of the measurements, as it would if the table were scanned for the
-  -- pollutant and then sorted.
+  CROSS JOIN unnest($1::text[]) AS p(code)
+  -- One probe of the primary key (station, pollutant, time) per station and pollutant, backwards:
+  -- the cost does not grow with the history of the measurements, as it would if the table were
+  -- scanned for the pollutant and then sorted.
   JOIN LATERAL (
     SELECT m.ts, m.value, m.unit
     FROM core.measurement m
-    WHERE m.station_id = s.id AND m.pollutant_code = $1 AND m.averaging_period = '1h'
+    WHERE m.station_id = s.id AND m.pollutant_code = p.code AND m.averaging_period = '1h'
     ORDER BY m.ts DESC
     LIMIT 1
   ) l ON true
-  LEFT JOIN guideline g ON true
+  LEFT JOIN LATERAL (
+    SELECT averaging_period AS period, value_ugm3
+    FROM core.who_guideline
+    WHERE pollutant_code = p.code AND averaging_period IN ('24h', '8h')
+    ORDER BY edition DESC, (averaging_period <> '24h')
+    LIMIT 1
+  ) g ON true
   LEFT JOIN LATERAL (
     SELECT AVG(x.ugm3) AS mean_ugm3, COUNT(x.ugm3) AS samples
     FROM (
       SELECT m.value * ${TO_UGM3} AS ugm3
       FROM core.measurement m
-      WHERE m.station_id = s.id AND m.pollutant_code = $1 AND m.averaging_period = '1h'
+      WHERE m.station_id = s.id AND m.pollutant_code = p.code AND m.averaging_period = '1h'
         AND m.ts > l.ts - interval '24 hours' AND m.ts <= l.ts AND ${KNOWN_UNIT}
     ) x
   ) d ON g.period = '24h'
   LEFT JOIN LATERAL (
     SELECT m.value * ${TO_UGM3} AS value_ugm3
     FROM core.measurement m
-    WHERE m.station_id = s.id AND m.pollutant_code = $1 AND m.averaging_period = '8h'
+    WHERE m.station_id = s.id AND m.pollutant_code = p.code AND m.averaging_period = '8h'
       AND ${KNOWN_UNIT}
     ORDER BY m.ts DESC
     LIMIT 1
   ) e ON g.period = '8h'
-  ORDER BY s.code`;
+  WHERE ($2::text IS NULL OR s.municipality_code = $2::text)
+  ORDER BY s.code, p.code`;
 
-interface Row {
+export interface Row {
   id: number;
   code: string;
   name: string;
   municipality_code: string;
   geometry: { type: string; coordinates: number[] } | null;
+  pollutant: string;
   ts: Date;
   value: string;
   unit: string;
@@ -84,7 +89,7 @@ const number = (value: string | null): number | null => {
 };
 
 /** The mean over the guideline, or null when there is nothing to compare or too little to trust. */
-function ratio(row: Row): number | null {
+export function ratio(row: Row): number | null {
   const mean = number(row.who_mean_ugm3);
   const guideline = number(row.who_guideline_ugm3);
   if (mean === null || guideline === null || guideline <= 0) return null;
@@ -92,8 +97,34 @@ function ratio(row: Row): number | null {
   return Math.round((mean / guideline) * 10_000) / 10_000;
 }
 
-const nullable = (type: "string" | "number" | "integer", description?: string) =>
+/** What a station says about a pollutant: its latest value and the comparison with the guideline. */
+export function reading(row: Row) {
+  return {
+    ts: row.ts.toISOString(),
+    value: Number(row.value),
+    unit: row.unit,
+    who_period: row.who_period,
+    who_guideline_ugm3: number(row.who_guideline_ugm3),
+    who_mean_ugm3: number(row.who_mean_ugm3),
+    who_samples: number(row.who_samples),
+    who_ratio: ratio(row),
+  };
+}
+
+export const nullable = (type: "string" | "number" | "integer", description?: string) =>
   ({ type, nullable: true, ...(description ? { description } : {}) }) as const;
+
+// How a reading is described in the OpenAPI document (also used by the stations of a unit).
+export const readingProperties = {
+  ts: { type: "string", description: "Time of the latest hourly value, ISO 8601 in UTC." },
+  value: { type: "number", description: "The latest hourly value, in `unit`. It can be old: see `ts`." },
+  unit: { type: "string", description: "As the network publishes it: µg/m3, mg/m3..." },
+  who_period: nullable("string", "Averaging period of the WHO guideline the value is compared with: 24h or 8h. Null if the pollutant has neither."),
+  who_guideline_ugm3: nullable("number", "The WHO 2021 guideline (most recent edition), in ug/m3."),
+  who_mean_ugm3: nullable("number", "For 24h: the mean of the trailing 24 hours up to `ts`. For 8h: the latest running mean of 8 hours. In ug/m3."),
+  who_samples: nullable("integer", "Hourly values behind the 24-hour mean (24 if complete)."),
+  who_ratio: nullable("number", "who_mean_ugm3 / who_guideline_ugm3, an indicator and not a verdict: the WHO defines the 24h guideline on a calendar day and the 8h one on the highest 8-hour mean of the day, so a value over 1 does not say that it was exceeded. Null without a guideline or with fewer than 18 hourly values."),
+} as const;
 
 const feature = {
   type: "object",
@@ -109,14 +140,7 @@ const feature = {
         code: { type: "string" },
         name: { type: "string" },
         municipality_code: { type: "string" },
-        ts: { type: "string", description: "Time of the latest hourly value, ISO 8601 in UTC." },
-        value: { type: "number", description: "The latest hourly value, in `unit`. It can be old: see `ts`." },
-        unit: { type: "string", description: "As the network publishes it: µg/m3, mg/m3..." },
-        who_period: nullable("string", "Averaging period of the WHO guideline the value is compared with: 24h or 8h. Null if the pollutant has neither."),
-        who_guideline_ugm3: nullable("number", "The WHO 2021 guideline (most recent edition), in ug/m3."),
-        who_mean_ugm3: nullable("number", "For 24h: the mean of the trailing 24 hours up to `ts`. For 8h: the latest running mean of 8 hours. In ug/m3."),
-        who_samples: nullable("integer", "Hourly values behind the 24-hour mean (24 if complete)."),
-        who_ratio: nullable("number", "who_mean_ugm3 / who_guideline_ugm3, an indicator and not a verdict: the WHO defines the 24h guideline on a calendar day and the 8h one on the highest 8-hour mean of the day, so a value over 1 does not say that it was exceeded. Null without a guideline or with fewer than 18 hourly values."),
+        ...readingProperties,
       },
     },
   },
@@ -151,7 +175,7 @@ export async function latestRoutes(app: FastifyInstance, { db }: { db: Db }) {
     },
     async (request) => {
       const { pollutant } = request.query;
-      const { rows } = await db.query<Row>(LATEST, [pollutant]);
+      const { rows } = await db.query<Row>(LATEST, [[pollutant], null]);
       return {
         type: "FeatureCollection",
         attribution: ATTRIBUTION,
@@ -164,14 +188,7 @@ export async function latestRoutes(app: FastifyInstance, { db }: { db: Db }) {
             code: row.code,
             name: row.name,
             municipality_code: row.municipality_code,
-            ts: row.ts.toISOString(),
-            value: Number(row.value),
-            unit: row.unit,
-            who_period: row.who_period,
-            who_guideline_ugm3: number(row.who_guideline_ugm3),
-            who_mean_ugm3: number(row.who_mean_ugm3),
-            who_samples: number(row.who_samples),
-            who_ratio: ratio(row),
+            ...reading(row),
           },
         })),
       };
