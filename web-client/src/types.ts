@@ -60,6 +60,27 @@ export interface StationReading {
   who_ratio: number | null;
 }
 
+/** A station of the map of the air quality: its latest value of the pollutant that was asked for. */
+export interface StationFeature {
+  type: "Feature";
+  /** null: a station that has no position is not drawn, but it still has data. */
+  geometry: { type: string; coordinates: number[] } | null;
+  properties: Omit<StationReading, "pollutant"> & {
+    id: number;
+    code: string;
+    name: string;
+    municipality_code: string;
+  };
+}
+
+export interface StationCollection {
+  type: "FeatureCollection";
+  /** The credit that the licence of the data asks for. */
+  attribution: string;
+  pollutant: string;
+  features: StationFeature[];
+}
+
 export interface UnitStation {
   id: number;
   code: string;

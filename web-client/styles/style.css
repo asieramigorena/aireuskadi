@@ -80,6 +80,47 @@ body {
   text-wrap: balance;
 }
 
+/* The way to choose the map. The caption lets the pointer through to the map; these do not. */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0.2rem;
+  pointer-events: auto;
+}
+
+.controls a {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--sea-line);
+  border-radius: 999px;
+  color: var(--text-on-sea);
+  font-size: 0.9rem;
+  text-decoration: none;
+  background: rgb(13 30 38 / 0.6);
+}
+
+.controls a:hover {
+  border-color: var(--muted-on-sea);
+}
+
+/* Not only another colour: filled and bold, so that it is seen without the colour. */
+.controls a[aria-current="true"] {
+  background: var(--text-on-sea);
+  color: var(--sea);
+  border-color: var(--text-on-sea);
+  font-weight: 650;
+}
+
+.controls select {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--sea-line);
+  border-radius: 6px;
+  background: var(--sea);
+  color: var(--text-on-sea);
+  font: inherit;
+  font-size: 0.9rem;
+}
+
 #status {
   margin: 0.5rem 0 0;
   min-height: 1.2em;
@@ -101,14 +142,47 @@ body {
 }
 
 #legend-bar {
+  position: relative;
   height: 0.55rem;
   border-radius: 2px;
+}
+
+/* The WHO guideline: the middle of the bar of the air quality, which goes from 0 to twice it. */
+.legend-tick {
+  position: absolute;
+  left: 50%;
+  top: -0.2rem;
+  bottom: -0.2rem;
+  width: 2px;
+  background: var(--text-on-sea);
+  /* A dark edge: on the yellow of the guideline the light line alone would not be seen. */
+  box-shadow: 0 0 0 1px var(--sea);
+  transform: translateX(-50%);
 }
 
 .legend-ends {
   display: flex;
   justify-content: space-between;
   margin-top: 0.25rem;
+}
+
+.legend .note {
+  margin: 0.5rem 0 0;
+  font-size: 0.72rem;
+}
+
+/* Three labels: the one of the middle stays in the middle, whatever the width of the other two. */
+.legend-ends.three {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+}
+
+.legend-ends.three span {
+  white-space: nowrap;
+}
+
+.legend-ends.three span:last-child {
+  text-align: right;
 }
 
 .legend .no-data {
@@ -313,6 +387,13 @@ body {
 
 /* A finger needs more room than a pointer. */
 @media (pointer: coarse) {
+  .controls a,
+  .controls select {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+  }
+
   #panel button {
     width: 2.75rem;
     height: 2.75rem;
@@ -347,6 +428,16 @@ body {
 @media (max-width: 52rem) {
   .legend {
     bottom: calc(var(--bottom) + 1.9rem);
+  }
+
+  /* The credits of the map of the air quality are longer (three lines on a phone), so the legend of
+   * that map goes higher. main.ts puts the class `air-view` in #app. */
+  .air-view .legend {
+    bottom: calc(var(--bottom) + 3.4rem);
+  }
+
+  .air-view #panel {
+    bottom: calc(max(0.4rem, env(safe-area-inset-bottom)) + 3.7rem);
   }
 
   .credits {
@@ -402,6 +493,18 @@ body {
     bottom: calc(var(--bottom) + 1.6rem);
     width: 10rem;
     font-size: 0.7rem;
+  }
+
+  /* The three labels of the air quality need a little more. */
+  .air-view .legend {
+    bottom: calc(var(--bottom) + 1.6rem);
+    width: 12rem;
+  }
+
+  /* On its side the panel is at the side: the sheet of the phone (which is raised for the credits of
+   * the air quality) does not apply, and this rule is later and as strong. */
+  .air-view #panel {
+    bottom: var(--bottom);
   }
 
   .legend .no-data {

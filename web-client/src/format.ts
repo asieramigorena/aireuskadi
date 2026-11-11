@@ -1,6 +1,6 @@
 // The numbers of the panel, in English, with three significant figures: the declared amounts go
 // from thousands of tonnes to a few grams.
-import type { Selection } from "./router";
+import type { Selection, View } from "./router";
 import type { StationReading } from "./types";
 
 const number = (value: number) => value.toLocaleString("en-US", { maximumSignificantDigits: 3 });
@@ -20,8 +20,21 @@ export const formatArea = (value: number) => `${number(value)} km²`;
 
 /** What the map shows. The API has no field for it: the label "declared industrial emissions" is
  * written here. */
-export const mapCaption = (selection: Selection) =>
-  `Declared industrial emissions of ${selection.pollutant} in ${selection.year}`;
+export function mapCaption(selection: Selection): string {
+  if (selection.view === "emissions") {
+    return `Declared industrial emissions of ${selection.pollutant} in ${selection.year}`;
+  }
+  // In the middle of a sentence: "nitrogen dioxide", but a code ("H2S") is left as it is.
+  const name = airPollutantName(selection.pollutant);
+  const said = name === selection.pollutant ? name : name.charAt(0).toLowerCase() + name.slice(1);
+  return `Latest air quality: ${said}, against the WHO guideline`;
+}
+
+/** What the map is, for whoever cannot see it. */
+export const mapLabel = (view: View) =>
+  view === "emissions"
+    ? "3D map of the declared industrial emissions of the Basque Country"
+    : "3D map of the latest air quality measured at the stations of the Basque Country";
 
 /** The words for a call that failed. A 422 is a pollutant or a year without data: the gateway says
  * that the parameters are invalid, which tells a person nothing. */
@@ -53,6 +66,9 @@ const AIR_POLLUTANTS: Record<string, string> = {
   SO2: "Sulphur dioxide",
   CO: "Carbon monoxide",
 };
+
+/** The pollutants that the map of the air quality offers: the ones that have a WHO guideline. */
+export const AIR_POLLUTANT_CODES = Object.keys(AIR_POLLUTANTS);
 
 /** The name of a pollutant that the stations measure; the API gives only its code. The ones of the
  * WHO are named here; for another, the name that the emissions of the same unit give it (`known`,

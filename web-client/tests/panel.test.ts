@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test, vi, type Mock } from "vitest";
 import { renderPanel, type PanelView } from "../src/panel";
 import type { StationReading, UnitAirQuality, UnitCard, UnitStation } from "../src/types";
 
-const SELECTION = { pollutant: "NOX", year: 2023 };
+const SELECTION = { view: "emissions" as const, pollutant: "NOX", year: 2023 };
 
 const card = (overrides: Partial<UnitCard> = {}): UnitCard => ({
   code: "01036",
@@ -179,6 +179,21 @@ describe("the air quality of the unit", () => {
     expect(children.indexOf("TABLE")).toBeLessThan(children.indexOf("SECTION"));
   });
 
+  test("in the map of the air quality it comes first, because it is what the person came to see", () => {
+    renderPanel(root, { status: "card", card: card({ air_quality: air() }) }, { ...SELECTION, view: "air", pollutant: "NO2" }, onClose);
+
+    const children = [...root.children].map((child) => child.tagName);
+    expect(children.indexOf("SECTION")).toBeLessThan(children.indexOf("TABLE"));
+    expect(root.children[1].tagName).toBe("P"); // the place of the unit comes first, under its name
+  });
+
+  test("the emissions table is still there in the map of the air quality, and no row of it is marked: the map is not showing it", () => {
+    renderPanel(root, { status: "card", card: card({ air_quality: air() }) }, { ...SELECTION, view: "air", pollutant: "CO" }, onClose);
+
+    expect(root.querySelector("caption")?.textContent).toBe("Declared industrial emissions in 2023");
+    expect(root.querySelector("tr[aria-current='true']")).toBeNull();
+  });
+
   test("each station is a block with its name, and its readings are a table of the pollutants", () => {
     const two = air({
       stations: [
@@ -209,6 +224,61 @@ describe("the air quality of the unit", () => {
 
     expect(rowsOf(section())[0][0]).toBe("Particles");
     expect(section()?.querySelector("td .measure")?.textContent).toBe("12 µg/m³");
+  });
+
+  describe("the station that the person chose on the map", () => {
+    const three = () =>
+      air({
+        stations: [station({ id: 7, name: "Seven" }), station({ id: 8, name: "Eight" }), station({ id: 9, name: "Nine" })],
+      });
+    const blocks = () => [...(section()?.querySelectorAll("details") ?? [])];
+
+    test("is open and marked, and the other ones stay closed", () => {
+      show({ status: "card", card: card({ air_quality: three() }), station: 8 });
+
+      expect(blocks().map((block) => block.open)).toEqual([false, true, false]);
+      expect(blocks().map((block) => block.getAttribute("aria-current"))).toEqual([null, "true", null]);
+    });
+
+    test("is brought into view, because the panel is short on a phone and the list can be long", () => {
+      const scroll = vi.fn();
+      window.HTMLElement.prototype.scrollIntoView = scroll;
+
+      show({ status: "card", card: card({ air_quality: three() }), station: 9 });
+
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(scroll.mock.contexts[0]).toBe(blocks()[2]);
+      expect(scroll).toHaveBeenCalledWith({ block: "start" });
+    });
+
+    test("when it is not one of the stations of the unit nothing is opened and nothing breaks", () => {
+      const scroll = vi.fn();
+      window.HTMLElement.prototype.scrollIntoView = scroll;
+
+      show({ status: "card", card: card({ air_quality: three() }), station: 99999 });
+
+      expect(blocks().map((block) => block.open)).toEqual([false, false, false]);
+      expect(section()?.querySelector("[aria-current]")).toBeNull();
+      expect(scroll).not.toHaveBeenCalled();
+    });
+
+    test("without a station nothing is marked, even when there is only one and it is open", () => {
+      show({ status: "card", card: card({ air_quality: air() }) });
+      expect(section()?.querySelector("[aria-current]")).toBeNull();
+      expect(blocks()[0].open).toBe(true);
+
+      show({ status: "card", card: card({ air_quality: air() }), station: null });
+      expect(section()?.querySelector("[aria-current]")).toBeNull();
+    });
+
+    test("a station without values that was chosen is open and says so", () => {
+      const quiet = air({ measured: false, reason: "no_data", stations: [station({ id: 7, readings: [] }), station({ id: 8, readings: [] })] });
+
+      show({ status: "card", card: card({ air_quality: quiet }), station: 8 });
+
+      expect(blocks().map((block) => block.open)).toEqual([false, true]);
+      expect(blocks()[1].textContent).toContain("No values yet.");
+    });
   });
 
   test("a unit with one station shows it open; with several they are closed, so that the list can be read", () => {

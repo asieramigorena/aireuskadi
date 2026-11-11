@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
-import { ApiError, createApi } from "../src/api";
+import { ApiError, createApi, failureText } from "../src/api";
 
-const SELECTION = { pollutant: "NOX", year: 2023 };
+const SELECTION = { view: "emissions" as const, pollutant: "NOX", year: 2023 };
 
 function answer(body: unknown, status = 200, type = "application/json") {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": type } });
@@ -56,6 +56,28 @@ describe("the calls go only to the gateway, to the routes of /api/v1", () => {
     expect(urlOf(fetchFn).pathname).toBe("/api/v1/units/01036");
   });
 
+  test("the latest value of each station, for a pollutant and nothing else", async () => {
+    const collection = { type: "FeatureCollection", attribution: "x", pollutant: "NO2", features: [] };
+    const { api, fetchFn } = apiWith(answer(collection));
+
+    expect(await api.stations("NO2")).toEqual(collection);
+
+    const url = urlOf(fetchFn);
+    expect(url.origin).toBe("http://page.test");
+    expect(url.pathname).toBe("/api/v1/stations/latest");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ pollutant: "NO2" });
+  });
+
+  test("the pollutant of the stations is a value: it cannot change the path", async () => {
+    const { api, fetchFn } = apiWith(answer({}));
+
+    await api.stations("../health?x=1");
+
+    const url = urlOf(fetchFn);
+    expect(url.pathname).toBe("/api/v1/stations/latest");
+    expect(url.searchParams.get("pollutant")).toBe("../health?x=1");
+  });
+
   test("a code is encoded, so it cannot change the path", async () => {
     const { api, fetchFn } = apiWith(answer({}));
 
@@ -101,7 +123,7 @@ describe("what goes wrong", () => {
     const problem = { status: 422, detail: "The request has invalid or missing parameters.", errors: [] };
     const { api } = apiWith(answer(problem, 422, "application/problem+json"));
 
-    const error = await api.points({ pollutant: "NOX", year: 2099 }).catch((e) => e);
+    const error = await api.points({ view: "emissions", pollutant: "NOX", year: 2099 }).catch((e) => e);
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(422);
@@ -135,5 +157,28 @@ describe("what goes wrong", () => {
     const error = await api.unit("01036").catch((e) => e);
 
     expect(error).toBe(cancelled);
+  });
+});
+
+describe("failureText: what the status line says when a load fails", () => {
+  test("a call that was cancelled says nothing: whoever cancelled it knows", () => {
+    expect(failureText(new DOMException("aborted", "AbortError"))).toBeNull();
+  });
+
+  test("an error of the service says what the gateway said, and a 422 is put in words", () => {
+    expect(failureText(new ApiError(404, "Unit 99999 not found."))).toBe("Unit 99999 not found.");
+    expect(failureText(new ApiError(422, "The request has errors."))).toBe(
+      "There is no data for that pollutant and year. Try another year.",
+    );
+    expect(failureText(new ApiError(0, "The service cannot be reached."))).toBe("The service cannot be reached.");
+  });
+
+  test.each([
+    ["a TypeError of the code that read the answer", new TypeError("features is not iterable")],
+    ["a RangeError", new RangeError("Invalid time value")],
+    ["something that is not an error", "x is not iterable"],
+    ["nothing", undefined],
+  ])("%s does not show its message: it says things about the inside", (_name, error) => {
+    expect(failureText(error)).toBe("The service is not available right now.");
   });
 });

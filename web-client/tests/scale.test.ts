@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { NO_DATA, colorFor, legendGradient, maxDensity } from "../src/scale";
+import { NO_DATA, RATIO_MAX, colorFor, legendGradient, maxDensity, ratioColor, ratioLegendGradient } from "../src/scale";
 import type { UnitFeature } from "../src/types";
 
 const feature = (t_km2: number | null): UnitFeature => ({
@@ -72,5 +72,57 @@ describe("legendGradient", () => {
     const [low, high] = [colorFor(0, 100), colorFor(100, 100)];
     expect(css).toContain(`rgb(${low[0]} ${low[1]} ${low[2]})`);
     expect(css.endsWith(`rgb(${high[0]} ${high[1]} ${high[2]}))`)).toBe(true);
+  });
+});
+
+describe("ratioColor: the air quality against the WHO guideline", () => {
+  test("below half the guideline it is blue, at the guideline yellow, and from twice the guideline red", () => {
+    expect(ratioColor(0)).toEqual([1, 152, 189, 235]);
+    expect(ratioColor(0.5)).toEqual([73, 200, 160, 235]);
+    expect(ratioColor(1)).toEqual([254, 224, 100, 235]);
+    expect(ratioColor(RATIO_MAX)).toEqual([209, 55, 78, 240]);
+  });
+
+  test("the scale ends at twice the guideline: more is the same red, so that one station does not hide the rest", () => {
+    expect(RATIO_MAX).toBe(2);
+    expect(ratioColor(2.0001)).toEqual(ratioColor(2));
+    expect(ratioColor(40)).toEqual(ratioColor(2));
+  });
+
+  test("between two stops the colour is in the middle", () => {
+    expect(ratioColor(0.25)).toEqual([37, 176, 175, 235]);
+    expect(ratioColor(1.5)).toEqual([232, 140, 89, 238]);
+  });
+
+  test("a ratio below zero is zero, not a colour out of the scale", () => {
+    expect(ratioColor(-3)).toEqual(ratioColor(0));
+  });
+
+  test("no ratio is the grey of no data (and not a colour of the scale), also for what is not a number", () => {
+    expect(ratioColor(null)).toEqual(NO_DATA);
+    expect(ratioColor(Number.NaN)).toEqual(NO_DATA);
+    expect(ratioColor(Number.POSITIVE_INFINITY)).toEqual(NO_DATA);
+  });
+
+  test("the grey that comes back is a copy: changing it does not change the one of no data", () => {
+    const grey = ratioColor(null);
+    grey[0] = 0;
+
+    expect(NO_DATA[0]).toBe(130);
+  });
+
+  test("a higher ratio is never a bluer colour: the blue channel goes down along the whole scale", () => {
+    const blues = [0, 0.25, 0.5, 0.75, 1, 1.5, 2].map((ratio) => ratioColor(ratio)[2]);
+
+    expect(blues).toEqual([...blues].sort((a, b) => b - a));
+    expect(new Set(blues).size).toBe(blues.length);
+  });
+});
+
+describe("ratioLegendGradient", () => {
+  test("has the stops of the scale, placed where the ratios are on the bar from 0 to twice the guideline", () => {
+    expect(ratioLegendGradient()).toBe(
+      "linear-gradient(to right, rgb(1 152 189) 0%, rgb(73 200 160) 25%, rgb(254 224 100) 50%, rgb(209 55 78) 100%)",
+    );
   });
 });

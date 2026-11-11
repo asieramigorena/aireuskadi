@@ -12,21 +12,18 @@
 
       <header class="caption">
         <h1>AirEuskadi</h1>
+        <nav id="controls" class="controls" aria-label="Choose the map"></nav>
         <p id="caption"></p>
         <p id="status" role="status"></p>
       </header>
 
       <aside id="panel" aria-label="Details of the unit" hidden></aside>
 
-      <section class="legend" aria-label="Colour of the units">
-        <p>Declared per km² of each unit</p>
-        <div id="legend-bar"></div>
-        <div class="legend-ends"><span>0</span><span id="legend-max"></span></div>
-        <p class="no-data"><span class="swatch"></span>No data</p>
-      </section>
+      <section id="legend" class="legend" aria-label="Colour of the units"></section>
 
       <footer class="credits">
-        <p>Emissions: E-PRTR register, Open Data Euskadi, CC BY 4.0.</p>
+        <p id="emissions-credit">Emissions: E-PRTR register, Open Data Euskadi, CC BY 4.0.</p>
+        <p id="air-credit"></p>
         <p id="attribution"></p>
       </footer>
     </main>

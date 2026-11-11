@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  AIR_POLLUTANT_CODES,
   airPollutantName,
   errorText,
   formatArea,
@@ -10,6 +11,7 @@ import {
   formatReadingRatio,
   formatTonnes,
   mapCaption,
+  mapLabel,
 } from "../src/format";
 import type { StationReading } from "../src/types";
 
@@ -49,7 +51,7 @@ describe("the numbers of the panel", () => {
 
 describe("the caption of the map", () => {
   test("says what is shown, with the label that the API does not give", () => {
-    expect(mapCaption({ pollutant: "NOX", year: 2023 })).toBe("Declared industrial emissions of NOX in 2023");
+    expect(mapCaption({ view: "emissions", pollutant: "NOX", year: 2023 })).toBe("Declared industrial emissions of NOX in 2023");
   });
 });
 
@@ -66,6 +68,33 @@ describe("what is said when a call fails", () => {
     [0, "The service cannot be reached."],
   ])("the other errors (%s) say what the call said", (status, message) => {
     expect(errorText(status, message)).toBe(message);
+  });
+});
+
+describe("the two maps", () => {
+  test("the caption of the air quality says that it is the latest value, of which pollutant, and against what", () => {
+    expect(mapCaption({ view: "air", pollutant: "NO2", year: 2023 })).toBe(
+      "Latest air quality: nitrogen dioxide, against the WHO guideline",
+    );
+    expect(mapCaption({ view: "air", pollutant: "PM25", year: 2023 })).toBe(
+      "Latest air quality: particles PM2.5, against the WHO guideline",
+    );
+  });
+
+  test("a pollutant without a name here is said by its code, and the year of the emissions is not in this caption", () => {
+    expect(mapCaption({ view: "air", pollutant: "H2S", year: 1999 })).toBe(
+      "Latest air quality: H2S, against the WHO guideline",
+    );
+  });
+
+  test("the label of the map for whoever cannot see it says which map it is", () => {
+    expect(mapLabel("emissions")).toBe("3D map of the declared industrial emissions of the Basque Country");
+    expect(mapLabel("air")).toBe("3D map of the latest air quality measured at the stations of the Basque Country");
+  });
+
+  test("the pollutants that the selector offers are the ones that have a guideline, in an order that is read", () => {
+    expect(AIR_POLLUTANT_CODES).toEqual(["NO2", "PM25", "PM10", "O3", "SO2", "CO"]);
+    for (const code of AIR_POLLUTANT_CODES) expect(airPollutantName(code)).not.toBe(code);
   });
 });
 

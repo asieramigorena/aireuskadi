@@ -17,7 +17,8 @@ export type PanelView =
   | { status: "closed" }
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "card"; card: UnitCard };
+  // `station` is the id of the station that the person chose on the map: it is shown open, at the top.
+  | { status: "card"; card: UnitCard; station?: number | null };
 
 const KIND = { municipality: "Municipality", district: "District", territory: "Territory" };
 
@@ -64,7 +65,10 @@ function emissionsTable(card: UnitCard, selection: Selection): HTMLElement {
   const body = element("tbody");
   for (const emission of rows) {
     const row = element("tr");
-    if (emission.pollutant === selection.pollutant) row.setAttribute("aria-current", "true");
+    // The row of the pollutant that the map shows; the map of the air quality shows another thing.
+    if (selection.view === "emissions" && emission.pollutant === selection.pollutant) {
+      row.setAttribute("aria-current", "true");
+    }
     const name = element("th", emission.name);
     name.scope = "row";
     row.append(
@@ -89,9 +93,16 @@ const NO_MEASUREMENT = new Map([
   ["level_not_supported", "Stations are shown for municipalities: choose one to see its air quality."],
 ]);
 
-function stationBlock(station: UnitStation, open: boolean, names: ReadonlyMap<string, string>): HTMLElement {
+function stationBlock(
+  station: UnitStation,
+  open: boolean,
+  chosen: boolean,
+  names: ReadonlyMap<string, string>,
+): HTMLElement {
   const block = element("details");
-  block.open = open;
+  block.open = open || chosen;
+  // The station of the map that was clicked: marked like the pollutant of the map in the emissions.
+  if (chosen) block.setAttribute("aria-current", "true");
   block.append(element("summary", station.name));
   if (station.readings.length === 0) {
     block.append(element("p", "No values yet.", "none"));
@@ -129,7 +140,7 @@ function stationBlock(station: UnitStation, open: boolean, names: ReadonlyMap<st
   return block;
 }
 
-function airQualitySection(air: UnitAirQuality | null, card: UnitCard): HTMLElement {
+function airQualitySection(air: UnitAirQuality | null, card: UnitCard, chosen: number | null): HTMLElement {
   const section = element("section", undefined, "air-quality");
   section.append(element("h3", "Air quality"));
   if (air === null) {
@@ -143,7 +154,9 @@ function airQualitySection(air: UnitAirQuality | null, card: UnitCard): HTMLElem
   const stations = air.stations ?? [];
   const names = new Map(card.emissions.map((emission) => [emission.pollutant, emission.name]));
   // One station is shown open; a list of them is closed so that the names can be read at once.
-  for (const station of stations) section.append(stationBlock(station, stations.length === 1, names));
+  for (const station of stations) {
+    section.append(stationBlock(station, stations.length === 1, station.id === chosen, names));
+  }
   if (air.measured) section.append(element("p", air.attribution, "source"));
   return section;
 }
@@ -152,11 +165,11 @@ function airQualitySection(air: UnitAirQuality | null, card: UnitCard): HTMLElem
  * service, and the name of the unit and its emissions are what the panel is for. Whatever is wrong
  * with it (a time that is not a time, a list that is not a list), the section says it is not
  * available. */
-function airQualityOf(card: UnitCard): HTMLElement {
+function airQualityOf(card: UnitCard, chosen: number | null): HTMLElement {
   try {
-    return airQualitySection(card.air_quality, card);
+    return airQualitySection(card.air_quality, card, chosen);
   } catch {
-    return airQualitySection(null, card);
+    return airQualitySection(null, card, null);
   }
 }
 
@@ -188,8 +201,13 @@ export function renderPanel(
       root.append(header(card.name, onClose));
       const places = [KIND[card.level], card.district?.name, card.territory?.name, formatArea(card.area_km2)];
       root.append(element("p", places.filter(Boolean).join(" · "), "meta"));
-      root.append(emissionsTable(card, selection));
-      root.append(airQualityOf(card));
+      // What the map shows comes first: the table of emissions or the stations.
+      const emissions = emissionsTable(card, selection);
+      const airQuality = airQualityOf(card, view.station ?? null);
+      root.append(...(selection.view === "air" ? [airQuality, emissions] : [emissions, airQuality]));
+      // The panel can be short (a phone) and the list long: the station that was chosen is brought
+      // to the top of the panel, under the header that stays there (scroll-padding-top).
+      airQuality.querySelector("details[aria-current='true']")?.scrollIntoView?.({ block: "start" });
     }
   }
 }
