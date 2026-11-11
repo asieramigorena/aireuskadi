@@ -76,14 +76,42 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  # The only way in for the browser: it asks the emissions service for an explicit list of routes
-  # and the service itself is never published. The port is only open on this machine.
+  # Air quality API (stations, latest values, series, exposure). Like the emissions service it only
+  # reads, publishes no port and is reached by the other containers as http://air-quality-service:8000.
+  air-quality-service:
+    build:
+      context: .
+      dockerfile: services/air-quality-service/air-quality.Dockerfile
+    environment:
+      # The read-only role, and the scheme of Node (postgresql://), not the one of SQLAlchemy.
+      DATABASE_URL: postgresql://${POSTGRES_READER_USER}:${POSTGRES_READER_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # /health asks the database. The image has no curl: Node makes the request, and a 503 or an
+    # error ends with a non-zero exit code.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8000/health', {signal: AbortSignal.timeout(3000)}).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # The only way in for the browser: it asks the emissions service and the air quality service for
+  # an explicit list of routes, and the services themselves are never published. The port is only
+  # open on this machine.
   api-gateway:
     build:
       context: .
       dockerfile: services/api-gateway/gateway.Dockerfile
     environment:
       EMISSIONS_URL: http://emissions-service:8000
+      AIR_QUALITY_URL: http://air-quality-service:8000
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-8080}:8000"
     # It also joins `edge`, the only network the tunnel is on.
@@ -91,7 +119,9 @@ services:
     depends_on:
       emissions-service:
         condition: service_healthy
-    # The check of the gateway itself: it does not ask the emissions service. The image has no curl.
+      air-quality-service:
+        condition: service_healthy
+    # The check of the gateway itself: it does not ask any service. The image has no curl.
     healthcheck:
       test:
         - CMD

@@ -5,11 +5,12 @@
 #
 # On the VM, in this folder:
 #   cp .env.prod.example .env      # and set the passwords: they are NOT the ones of the laptop
-#   docker login ghcr.io           # with a token that can only read packages
-#   mkdir tunnel; paste tunnel/serve.json   # (repository is private; chmod 644 it) and set COMPOSE_PROFILES=tunnel and
-#                                  # TS_AUTHKEY in .env to turn the tunnel on; without them it does not start
+#   docker login ghcr.io           # only if the packages of the images are private: with a token that
+#                                  # can only read packages. Public packages need no login
+#   tunnel/serve.json              # needed only for the tunnel (it comes with the repository; chmod 644 it):
+#                                  # set COMPOSE_PROFILES=tunnel and TS_AUTHKEY in .env to turn it on
 #   docker compose -f docker-compose.prod.yml up -d
-# Watchtower asks every five minutes for a new :pro image of the three application services and
+# Watchtower asks every five minutes for a new :pro image of the four application services and
 # restarts them. The database is not updated by it: a new image of PostgreSQL can change the format
 # of the data, so that one is changed by hand.
 # db-init runs at each `docker compose up -d`, not when Watchtower updates a service: after a release that
@@ -85,16 +86,40 @@ services:
       retries: 3
       start_period: 15s
 
+  # Air quality API. It only reads, like the emissions service, and the gateway reaches it by name.
+  air-quality-service:
+    <<: *application
+    image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-air-quality-service:${IMAGE_TAG:-pro}
+    environment:
+      # The read-only role, and the scheme of Node (postgresql://), not the one of SQLAlchemy.
+      DATABASE_URL: postgresql://${POSTGRES_READER_USER}:${POSTGRES_READER_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8000/health', {signal: AbortSignal.timeout(3000)}).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   # The only way in: the page and the API. No port is published: the tunnel reaches it by name.
   api-gateway:
     <<: *application
     image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-api-gateway:${IMAGE_TAG:-pro}
     environment:
       EMISSIONS_URL: http://emissions-service:8000
+      AIR_QUALITY_URL: http://air-quality-service:8000
     # It also joins `edge`, the only network the tunnel is on.
     networks: [default, edge]
     depends_on:
       emissions-service:
+        condition: service_healthy
+      air-quality-service:
         condition: service_healthy
     healthcheck:
       test:
@@ -121,9 +146,10 @@ services:
       db-init:
         condition: service_completed_successfully
 
-  # Updates the three services above when a new :pro image appears. It is the maintained fork:
+  # Updates the four services above when a new :pro image appears. It is the maintained fork:
   # the original containrrr/watchtower was archived in December 2025 and does not work with
-  # Docker 29 or later. It reads the token of GHCR from the docker login of the VM.
+  # Docker 29 or later. If the images are private it reads the token of GHCR from the docker login
+  # of the VM; with public images it needs none.
   watchtower:
     image: nickfedor/watchtower:latest
     command: ["--interval", "300", "--label-enable", "--cleanup"]

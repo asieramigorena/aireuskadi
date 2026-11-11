@@ -17,17 +17,22 @@ PREFIX = "/api/v1"
 
 
 def create_app(
-    emissions: httpx.AsyncClient, *, docs: bool = False, web_dir: Path | None = None
+    emissions: httpx.AsyncClient,
+    *,
+    air_quality: httpx.AsyncClient,
+    docs: bool = False,
+    web_dir: Path | None = None,
 ) -> FastAPI:
-    """`emissions` is the client of the emissions service. The interactive pages (/docs and
-    /redoc) load their scripts from other sites, so they and /openapi.json are only there if
-    asked. `web_dir` is the folder of the compiled web page; without it the gateway publishes only
-    the API (in development the page comes from Vite)."""
+    """`emissions` and `air_quality` are the clients of the two services behind the gateway. The
+    interactive pages (/docs and /redoc) load their scripts from other sites, so they and
+    /openapi.json are only there if asked. `web_dir` is the folder of the compiled web page;
+    without it the gateway publishes only the API (in development the page comes from Vite)."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         yield
         await emissions.aclose()
+        await air_quality.aclose()
 
     app = FastAPI(
         title="AirEuskadi API Gateway",
@@ -44,6 +49,7 @@ def create_app(
     # of the service and the values of the query. The request log of the gateway replaces it.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     app.state.emissions = emissions
+    app.state.air_quality = air_quality
     install_problem_documents(app)
     # The checks of the compose come every few seconds: they are only in the log at DEBUG.
     install_request_log(app, "api_gateway.access", quiet_paths=(routes.HEALTH_PATH,))
@@ -54,19 +60,25 @@ def create_app(
     return app
 
 
-def app_from_env() -> FastAPI:
-    """Build the application from EMISSIONS_URL (and WEB_DIR). It is what the container runs:
-    uvicorn finds it by name in the CMD of gateway.Dockerfile (--factory), so no Python code
-    calls it."""
-    configure_logging("api_gateway", uvicorn=True)
-    emissions = httpx.AsyncClient(
-        base_url=os.environ.get("EMISSIONS_URL", "http://emissions-service:8000"),
-        # The service cuts its own queries after 5 s: a longer wait is a service that is stuck.
+def service_client(variable: str, default: str) -> httpx.AsyncClient:
+    """The client of one service: its address comes from the environment `variable`."""
+    return httpx.AsyncClient(
+        base_url=os.environ.get(variable, default),
+        # The services cut their own queries after 5 s: a longer wait is a service that is stuck.
         timeout=httpx.Timeout(10.0, connect=3.0),
         follow_redirects=False,
     )
+
+
+def app_from_env() -> FastAPI:
+    """Build the application from EMISSIONS_URL and AIR_QUALITY_URL (and WEB_DIR). It is what the
+    container runs: uvicorn finds it by name in the CMD of gateway.Dockerfile (--factory), so no
+    Python code calls it."""
+    configure_logging("api_gateway", uvicorn=True)
+    emissions = service_client("EMISSIONS_URL", "http://emissions-service:8000")
+    air_quality = service_client("AIR_QUALITY_URL", "http://air-quality-service:8000")
     docs = os.environ.get("DOCS_ENABLED", "").lower() in ("1", "true")
-    return create_app(emissions, docs=docs, web_dir=web_dir_from_env())
+    return create_app(emissions, air_quality=air_quality, docs=docs, web_dir=web_dir_from_env())
 
 
 def web_dir_from_env() -> Path | None:

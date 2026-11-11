@@ -7,10 +7,7 @@ ROUTES = [
     ("/api/v1/facilities/points?pollutant=NOX&year=2023", "/facilities/points"),
     ("/api/v1/facilities/12", "/facilities/12"),
     ("/api/v1/units?level=municipality&pollutant=NOX&year=2023", "/units"),
-    ("/api/v1/units/01036", "/units/01036"),
-    ("/api/v1/units/9901", "/units/9901"),
-    ("/api/v1/units/48", "/units/48"),
-]
+]  # the card of a unit (/units/<code>) is put together from two services: test_unit_card_composition.py
 
 
 @pytest.mark.parametrize(("public", "internal"), ROUTES)

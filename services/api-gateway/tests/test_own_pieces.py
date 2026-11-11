@@ -2,6 +2,9 @@
 
 import logging
 
+from api_gateway.main import create_app
+from fastapi.testclient import TestClient
+
 ACCESS = "api_gateway.access"
 
 
@@ -65,3 +68,14 @@ def test_the_library_that_asks_the_service_does_not_write_its_own_line_in_the_lo
     assert [r for r in caplog.records if r.name.startswith(("httpx", "httpcore"))] == []
     assert "emissions.internal" not in caplog.text
     assert "NOX" not in caplog.text
+
+
+def test_the_connections_to_both_services_are_closed_when_the_gateway_stops(upstreams):
+    emissions_client, air_quality_client = upstreams
+
+    with TestClient(create_app(emissions_client, air_quality=air_quality_client)):
+        assert not emissions_client.is_closed
+        assert not air_quality_client.is_closed
+
+    assert emissions_client.is_closed
+    assert air_quality_client.is_closed
