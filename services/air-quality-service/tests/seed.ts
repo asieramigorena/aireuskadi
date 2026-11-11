@@ -86,3 +86,25 @@ export function hourly(endIso: string, count: number, value: number, unit = "µg
     unit,
   }));
 }
+
+/**
+ * `count` hourly values in one statement (a year has 8760 hours: one insert for each would be slow),
+ * starting at `startIso`, all equal to `value`.
+ */
+export async function addHourlyRun(
+  db: Db,
+  stationId: number,
+  pollutant: string,
+  startIso: string,
+  count: number,
+  value: number,
+  unit = "µg/m3",
+) {
+  await addPollutant(db, pollutant);
+  await db.query(
+    `INSERT INTO core.measurement (station_id, pollutant_code, ts, averaging_period, value, unit)
+     SELECT $1, $2, $3::timestamptz + (n * interval '1 hour'), '1h', $4, $5
+     FROM generate_series(0, $6::int - 1) AS n`,
+    [stationId, pollutant, startIso, value, unit, count],
+  );
+}
