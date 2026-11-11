@@ -153,6 +153,8 @@ body {
   overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  /* A station that is focused with the keyboard is not left under the header that stays at the top. */
+  scroll-padding-top: 4.5rem;
   /* No padding on top: the header has its own and stays in place while the rest is scrolled. */
   --panel-pad-top: 1.25rem;
   padding: 0 1rem 1.25rem 1.4rem;
@@ -254,6 +256,56 @@ body {
   color: #8a1c2e;
 }
 
+/* The air quality of the unit: a block for each station, closed when there are several. */
+#panel section.air-quality {
+  margin-top: 1.5rem;
+}
+
+#panel h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+#panel details {
+  border-top: 1px solid var(--paper-line);
+  padding: 0.2rem 0;
+}
+
+/* The outline of the focus is yellow for the dark map; on the pale panel it would not be seen. */
+#panel :focus-visible {
+  outline-color: var(--ink);
+}
+
+#panel summary {
+  padding: 0.35rem 0;
+  font-weight: 600;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+#panel .updated,
+#panel .source,
+#panel p.none {
+  margin: 0.25rem 0 0.6rem;
+  font-size: 0.8rem;
+  color: #4a5f66;
+}
+
+/* The numbers of the emissions table stay in one line; the notes of this one ("0.6x the WHO
+ * guideline (19 of 24 hours)") have to wrap, or the panel, which hides what overflows, cuts them. */
+#panel table.readings td {
+  white-space: normal;
+}
+
+/* A long word in the name of a pollutant must not push the table out of the panel. */
+#panel table.readings th {
+  overflow-wrap: anywhere;
+}
+
+#panel .measure {
+  white-space: nowrap;
+}
+
 :focus-visible {
   outline: 2px solid #ffd479;
   outline-offset: 2px;
@@ -269,6 +321,11 @@ body {
   #panel th,
   #panel td {
     padding-block: 0.65rem;
+  }
+
+  /* 2 x 0.8rem and a line of 1.4: about 47 px, like the buttons. */
+  #panel summary {
+    padding-block: 0.8rem;
   }
 }
 
