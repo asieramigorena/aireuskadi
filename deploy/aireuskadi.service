@@ -1,0 +1,39 @@
+# Starts AirEuskadi on the Oracle VM: it reads the secrets of the OCI Vault (fetch-secrets.sh) and
+# then starts the stack with them. To install it, on the VM, in the folder of the repository:
+#   sudo install -m 755 -o root -g root deploy/fetch-secrets.sh /usr/local/sbin/aireuskadi-fetch-secrets
+#   sudo mkdir -p /etc/aireuskadi && echo 'VAULT_ID=<ocid of the vault>' | sudo tee /etc/aireuskadi/vault.env
+#   sudo chmod 600 /etc/aireuskadi/vault.env
+#   sudo cp deploy/aireuskadi.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#   sudo systemctl enable --now aireuskadi
+# The script is installed in a folder of root, and not run from the repository: this unit runs as root,
+# and a script that the user `ubuntu` can write would be root for any process of that user. Install it
+# again after `git pull` if it changed.
+#
+# To change a password: change the secret in OCI and `sudo systemctl restart aireuskadi`. That is all
+# for the password of the read-only role (db-init sets it on each start). The password of the OWNER of
+# the database is not: the image of PostgreSQL reads it only when it makes the volume, so after
+# changing that secret the database still has the old one and the services cannot connect until
+# `ALTER ROLE <owner> PASSWORD '<new>'` is run by hand.
+# If the packages of the images are private, `docker login ghcr.io` has to be done as root (sudo): this
+# unit runs as root, and root has its own docker configuration.
+# The paths of the repository are the ones of the user `ubuntu`: change them if it is somewhere else.
+[Unit]
+Description=AirEuskadi: read the secrets of the OCI Vault and start the stack
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+WorkingDirectory=/home/ubuntu/aireuskadi
+EnvironmentFile=/etc/aireuskadi/vault.env
+ExecStart=/usr/local/sbin/aireuskadi-fetch-secrets
+# .env has what is not secret (names, the images, the tunnel); the secrets come from /run.
+ExecStart=/usr/bin/docker compose --env-file .env --env-file /run/aireuskadi/secrets.env -f docker-compose.prod.yml up -d
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

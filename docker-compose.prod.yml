@@ -4,12 +4,16 @@
 # to http://api-gateway:8000 (the `tunnel` service at the end, only with the profile `tunnel`).
 #
 # On the VM, in this folder:
-#   cp .env.prod.example .env      # and set the passwords: they are NOT the ones of the laptop
+#   cp .env.prod.example .env      # only what is not secret. The PASSWORDS are in the OCI Vault: the
+#                                  # unit deploy/aireuskadi.service reads them (deploy/fetch-secrets.sh,
+#                                  # into memory) and starts the stack; its header says how to install it
 #   docker login ghcr.io           # only if the packages of the images are private: with a token that
 #                                  # can only read packages. Public packages need no login
 #   tunnel/serve.json              # needed only for the tunnel (it comes with the repository; chmod 644 it):
-#                                  # set COMPOSE_PROFILES=tunnel and TS_AUTHKEY in .env to turn it on
-#   docker compose -f docker-compose.prod.yml up -d
+#                                  # set COMPOSE_PROFILES=tunnel in .env to turn it on; the key TS_AUTHKEY
+#                                  # is the secret aireuskadi-tailscale-authkey of the Vault
+#   docker compose --env-file .env --env-file /run/aireuskadi/secrets.env -f docker-compose.prod.yml up -d
+#                                  # what the unit does; by hand, only after fetch-secrets.sh has run
 # Watchtower asks every five minutes for a new :pro image of the four application services and
 # restarts them. The database is not updated by it: a new image of PostgreSQL can change the format
 # of the data, so that one is changed by hand.
@@ -40,7 +44,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?set it in .env}
       POSTGRES_USER: ${POSTGRES_USER:?set it in .env}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?it comes from the Vault (see deploy/fetch-secrets.sh)}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -59,7 +63,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       POSTGRES_READER_USER: ${POSTGRES_READER_USER:?set it in .env}
-      POSTGRES_READER_PASSWORD: ${POSTGRES_READER_PASSWORD:?set it in .env}
+      POSTGRES_READER_PASSWORD: ${POSTGRES_READER_PASSWORD:?it comes from the Vault (see deploy/fetch-secrets.sh)}
     depends_on:
       postgres:
         condition: service_healthy
@@ -163,7 +167,7 @@ services:
 
   # The way in: Tailscale Funnel (issue #11). It opens only an outbound connection, publishes no port
   # and shows ONLY the gateway. It is optional: it starts only with COMPOSE_PROFILES=tunnel in .env,
-  # and needs the folder tunnel/ (serve.json) next to this file and TS_AUTHKEY for the first start. If
+  # and needs the folder tunnel/ (serve.json) next to this file and TS_AUTHKEY (from the Vault) for the first start. If
   # the same tunnel still runs on the laptop, stop it first: two machines cannot share the name.
   tunnel:
     image: tailscale/tailscale:v1.104.4
