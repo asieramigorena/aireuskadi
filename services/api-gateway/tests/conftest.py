@@ -1,5 +1,5 @@
-"""Fixtures. The emissions service is a fake that answers through httpx.MockTransport: it is the
-boundary of the gateway, and it keeps what the gateway sent."""
+"""Fixtures. The two services (emissions and air quality) are fakes that answer through
+httpx.MockTransport: they are the boundary of the gateway, and they keep what the gateway sent."""
 
 import logging
 import sys
@@ -10,7 +10,7 @@ from api_gateway.main import create_app
 from fastapi.testclient import TestClient
 
 
-class FakeEmissions:
+class FakeUpstream:
     """What the gateway sent (`requests`) and what the fake answers (`respond`)."""
 
     def __init__(self):
@@ -38,7 +38,25 @@ class FakeEmissions:
 
 @pytest.fixture
 def emissions():
-    return FakeEmissions()
+    return FakeUpstream()
+
+
+@pytest.fixture
+def air_quality():
+    return FakeUpstream()
+
+
+@pytest.fixture
+def upstreams(emissions, air_quality):
+    """The two clients of the gateway, wired to the fakes (each one with its own host)."""
+    return (
+        httpx.AsyncClient(
+            base_url="http://emissions.internal:8000", transport=httpx.MockTransport(emissions)
+        ),
+        httpx.AsyncClient(
+            base_url="http://air-quality.internal:8000", transport=httpx.MockTransport(air_quality)
+        ),
+    )
 
 
 INDEX = (
@@ -63,20 +81,17 @@ def web_dir(tmp_path):
 
 
 @pytest.fixture
-def web_client(emissions, web_dir):
-    upstream = httpx.AsyncClient(
-        base_url="http://emissions.internal:8000", transport=httpx.MockTransport(emissions)
-    )
-    with TestClient(create_app(upstream, web_dir=web_dir)) as client:
+def web_client(upstreams, web_dir):
+    emissions_client, air_quality_client = upstreams
+    app = create_app(emissions_client, air_quality=air_quality_client, web_dir=web_dir)
+    with TestClient(app) as client:
         yield client
 
 
 @pytest.fixture
-def client(emissions):
-    upstream = httpx.AsyncClient(
-        base_url="http://emissions.internal:8000", transport=httpx.MockTransport(emissions)
-    )
-    with TestClient(create_app(upstream)) as client:
+def client(upstreams):
+    emissions_client, air_quality_client = upstreams
+    with TestClient(create_app(emissions_client, air_quality=air_quality_client)) as client:
         yield client
 
 

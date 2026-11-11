@@ -26,10 +26,31 @@ def test_the_environment_says_where_the_emissions_service_is(monkeypatch):
     assert str(app.state.emissions.base_url) == "http://other-host:9000"
 
 
-def test_the_wait_for_the_service_is_short_and_a_redirect_is_not_followed():
-    client = app_from_env().state.emissions
+def test_the_air_quality_service_is_asked_at_its_name_in_the_compose_unless_told_otherwise(
+    monkeypatch,
+):
+    monkeypatch.delenv("AIR_QUALITY_URL", raising=False)
 
-    # The service cuts its own queries after 5 s: a longer wait is a service that is stuck. A
+    app = app_from_env()
+
+    assert str(app.state.air_quality.base_url) == "http://air-quality-service:8000"
+
+
+def test_the_environment_says_where_the_air_quality_service_is(monkeypatch):
+    monkeypatch.setenv("AIR_QUALITY_URL", "http://other-host:9100")
+    monkeypatch.setenv("EMISSIONS_URL", "http://emissions-host:9000")
+
+    app = app_from_env()
+
+    assert str(app.state.air_quality.base_url) == "http://other-host:9100"
+    assert str(app.state.emissions.base_url) == "http://emissions-host:9000"
+
+
+@pytest.mark.parametrize("service", ["emissions", "air_quality"])
+def test_the_wait_for_a_service_is_short_and_a_redirect_is_not_followed(service):
+    client = getattr(app_from_env().state, service)
+
+    # The services cut their own queries after 5 s: a longer wait is a service that is stuck. A
     # redirect would take the gateway to wherever the service says.
     assert client.timeout.read == 10.0
     assert client.timeout.connect == 3.0

@@ -86,7 +86,7 @@ services:
       retries: 3
       start_period: 15s
 
-  # Air quality API. It only reads, like the emissions service, and the gateway will reach it by name.
+  # Air quality API. It only reads, like the emissions service, and the gateway reaches it by name.
   air-quality-service:
     <<: *application
     image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-air-quality-service:${IMAGE_TAG:-pro}
@@ -113,10 +113,13 @@ services:
     image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-api-gateway:${IMAGE_TAG:-pro}
     environment:
       EMISSIONS_URL: http://emissions-service:8000
+      AIR_QUALITY_URL: http://air-quality-service:8000
     # It also joins `edge`, the only network the tunnel is on.
     networks: [default, edge]
     depends_on:
       emissions-service:
+        condition: service_healthy
+      air-quality-service:
         condition: service_healthy
     healthcheck:
       test:
