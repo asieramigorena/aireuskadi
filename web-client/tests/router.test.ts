@@ -72,6 +72,46 @@ describe("homeUrl", () => {
   });
 });
 
+describe("the language that the person chose", () => {
+  test("is in the address, and only when it was chosen: without it the browser decides", () => {
+    expect(parseLocation("/", "").selection).not.toHaveProperty("lang");
+    expect(parseLocation("/", "?lang=eu").selection.lang).toBe("eu");
+    expect(parseLocation("/", "?lang=es").selection.lang).toBe("es");
+    expect(parseLocation("/", "?lang=en").selection.lang).toBe("en");
+  });
+
+  test.each(["?lang=", "?lang=fr", "?lang=EU", "?lang=eu-ES", "?lang=<script>", "?lang=eu%20", "?lang=%00"])(
+    "a language that the page does not have (%s) is as if there were none",
+    (query) => {
+      expect(parseLocation("/", query).selection).not.toHaveProperty("lang");
+    },
+  );
+
+  test("travels in every address that the page makes, next to the rest of the choice", () => {
+    expect(homeUrl({ ...emissions("NOX", 2023), lang: "es" })).toBe("/?lang=es");
+    expect(homeUrl({ ...air("NO2"), lang: "eu" })).toBe("/?view=air&lang=eu");
+    expect(homeUrl({ ...emissions("CO", 2019), lang: "en" })).toBe("/?pollutant=CO&year=2019&lang=en");
+    expect(unitUrl("48020", { ...air("O3"), lang: "es" }, 195)).toBe("/unit/48020?view=air&pollutant=O3&lang=es&station=195");
+  });
+
+  test("no choice (nothing, or null) leaves the address as it was", () => {
+    expect(homeUrl({ ...emissions("NOX", 2023), lang: null })).toBe("/");
+    expect(unitUrl("48020", { ...air("NO2"), lang: null })).toBe("/unit/48020?view=air");
+  });
+
+  test("what the address says is what is read back", () => {
+    const chosen: Selection = { ...air("PM10"), lang: "eu" };
+
+    expect(parseLocation("/", homeUrl(chosen).slice(1)).selection).toEqual(chosen);
+    expect(parseLocation("/unit/48020", unitUrl("48020", chosen, 7).split("?")[1].replace(/^/, "?")).selection).toEqual(chosen);
+  });
+
+  test("the language is read on the address of a unit as it is on the home, and does not touch the rest", () => {
+    expect(parseLocation("/unit/48020", "?lang=es&station=7").route).toEqual({ name: "unit", code: "48020", station: 7 });
+    expect(parseLocation("/unit/48020", "?lang=es").selection.lang).toBe("es");
+  });
+});
+
 describe("the station that is open in the panel", () => {
   test("the unit says which station of it is open, by its id", () => {
     expect(parseLocation("/unit/48020", "?view=air&station=212")).toEqual({

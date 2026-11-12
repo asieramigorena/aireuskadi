@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
-import { renderControls } from "../src/controls";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { renderControls, renderLanguages } from "../src/controls";
+import { setLanguage } from "../src/i18n";
 import type { Selection } from "../src/router";
 
 const emissions: Selection = { view: "emissions", pollutant: "NOX", year: 2023 };
@@ -209,5 +210,122 @@ describe("drawing it again", () => {
 
     expect(root.querySelector("img")).toBeNull();
     expect((window as unknown as { __controls?: number }).__controls).toBeUndefined();
+  });
+});
+
+afterEach(() => setLanguage("en"));
+
+describe("the controls of the maps in Spanish and in Basque", () => {
+  test("the names of the two maps, and of the pollutants and of the selector", () => {
+    setLanguage("es");
+    show(air("O3"));
+
+    expect(links().map((link) => link.textContent)).toEqual(["Emisiones", "Calidad del aire"]);
+    expect([...root.querySelectorAll("option")].map((option) => option.textContent)).toEqual([
+      "Dióxido de nitrógeno",
+      "Partículas PM2,5",
+      "Partículas PM10",
+      "Ozono",
+      "Dióxido de azufre",
+      "Monóxido de carbono",
+    ]);
+    expect(select()?.getAttribute("aria-label")).toBe("Contaminante de la calidad del aire");
+
+    setLanguage("eu");
+    show(air("O3"));
+    expect(links().map((link) => link.textContent)).toEqual(["Isuriak", "Aire kalitatea"]);
+    expect(select()?.getAttribute("aria-label")).toBe("Aire kalitatearen kutsatzailea");
+    expect(root.querySelector("option")?.textContent).toBe("Nitrogeno dioxidoa");
+  });
+
+  test("the language that was chosen goes in the address of each map", () => {
+    show({ ...emissions, lang: "es" });
+
+    expect(links().map((link) => link.getAttribute("href"))).toEqual(["/?lang=es", "/?view=air&lang=es"]);
+  });
+
+  test("and the pollutant that is chosen keeps it", () => {
+    show({ ...air(), lang: "eu" });
+    (select() as HTMLSelectElement).value = "O3";
+    select()?.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(navigate).toHaveBeenLastCalledWith("/?view=air&pollutant=O3&lang=eu");
+  });
+});
+
+describe("the selector of the language", () => {
+  const languages = () => [...root.querySelectorAll("a")];
+  const draw = (current: "eu" | "es" | "en", selection: Selection = emissions, unit: string | null = null, station: number | null = null) =>
+    renderLanguages(root, current, selection, unit, navigate, station);
+
+  test("are three links, with the code of the language as their text and its name as their title", () => {
+    draw("eu");
+
+    expect(languages().map((link) => link.textContent)).toEqual(["EU", "ES", "EN"]);
+    expect(languages().map((link) => link.getAttribute("title"))).toEqual(["Euskara", "Español", "English"]);
+    expect(languages().map((link) => link.getAttribute("lang"))).toEqual(["eu", "es", "en"]);
+  });
+
+  test("each is named by the name of its language, not by two letters that a reader would spell out", () => {
+    draw("eu");
+
+    expect(languages().map((link) => link.getAttribute("aria-label"))).toEqual(["Euskara", "Español", "English"]);
+  });
+
+  test("the one in use is marked", () => {
+    draw("es");
+
+    expect(languages().map((link) => link.getAttribute("aria-current"))).toEqual([null, "true", null]);
+  });
+
+  test("each is an address, which keeps the map and the pollutant, and says the language", () => {
+    draw("eu", air("O3"));
+
+    expect(languages().map((link) => link.getAttribute("href"))).toEqual([
+      "/?view=air&pollutant=O3&lang=eu",
+      "/?view=air&pollutant=O3&lang=es",
+      "/?view=air&pollutant=O3&lang=en",
+    ]);
+  });
+
+  test("with a unit and a station open, they stay open", () => {
+    draw("eu", air(), "48020", 195);
+
+    expect(languages().map((link) => link.getAttribute("href"))).toEqual([
+      "/unit/48020?view=air&lang=eu&station=195",
+      "/unit/48020?view=air&lang=es&station=195",
+      "/unit/48020?view=air&lang=en&station=195",
+    ]);
+  });
+
+  test("a click is a navigation of the page, and a click with a key is the browser's", () => {
+    draw("eu");
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+    languages()[1].dispatchEvent(click);
+
+    expect(click.defaultPrevented).toBe(true);
+    expect(navigate).toHaveBeenCalledWith("/?lang=es");
+
+    navigate.mockClear();
+    const other = new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true });
+    languages()[2].dispatchEvent(other);
+    expect(other.defaultPrevented).toBe(false);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  test("the focus stays on the language that had it when they are drawn again", () => {
+    draw("eu");
+    languages()[1].focus();
+
+    draw("es");
+
+    expect(document.activeElement).toBe(languages()[1]);
+  });
+
+  test("drawing them again replaces them", () => {
+    draw("eu");
+    draw("es");
+
+    expect(root.querySelectorAll("a")).toHaveLength(3);
   });
 });

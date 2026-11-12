@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, test, vi, type Mock } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi, type Mock } from "vitest";
+import { setLanguage } from "../src/i18n";
 import { renderPanel, type PanelView } from "../src/panel";
 import type { StationReading, UnitAirQuality, UnitCard, UnitStation } from "../src/types";
 
@@ -97,6 +98,13 @@ describe("what the panel shows", () => {
     show({ status: "card", card: card({ level: "territory", district: null, territory: null, name: "Bizkaia" }) });
 
     expect(root.querySelector(".meta")?.textContent).toBe("Territory · 37.3 km²");
+  });
+
+  test("the ratio of the emissions is a cell that may wrap: in Basque it is a long phrase", () => {
+    show({ status: "card", card: card() });
+
+    const cells = [...root.querySelectorAll("tbody td.ratio")];
+    expect(cells.map((cell) => cell.textContent)).toEqual(["No data", "0.4× the WHO guideline", "No data"]);
   });
 
   test("the emissions of the selected year, with the label that the API does not give", () => {
@@ -466,5 +474,137 @@ describe("closing", () => {
     root.querySelector("button")?.click();
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+// --- the language of the panel --------------------------------------------------------------------
+
+afterEach(() => setLanguage("en"));
+
+describe("the panel in Spanish", () => {
+  const stations = () =>
+    air({ stations: [station({ readings: [reading({ pollutant: "NO2" }), reading({ pollutant: "H2S", who_samples: 19 })] })] });
+
+  test("the card: the kind of unit, the emissions and the air quality, with their columns", () => {
+    setLanguage("es");
+    show({ status: "card", card: card({ air_quality: stations() }) });
+
+    expect(root.querySelector(".meta")?.textContent).toBe("Municipio · Cantábrica Alavesa · Araba / Álava · 37,3 km²");
+    expect(root.querySelector("caption")?.textContent).toBe("Emisiones industriales declaradas en 2023");
+    expect([...root.querySelectorAll("table")[0].querySelectorAll("thead th")].map((cell) => cell.textContent)).toEqual([
+      "Contaminante",
+      "Declarado",
+      "Por km²",
+      "Valor guía OMS",
+    ]);
+    expect(root.querySelector("h3")?.textContent).toBe("Calidad del aire");
+    expect(root.querySelector("section.air-quality thead")?.textContent).toBe("ContaminanteÚltimoValor guía OMS");
+    expect(root.querySelector("button")?.getAttribute("aria-label")).toBe("Cerrar el panel");
+  });
+
+  test("the names of the pollutants of the emissions are Spanish, by their code", () => {
+    setLanguage("es");
+    show({ status: "card", card: card() });
+
+    const names = [...root.querySelectorAll("tbody th")].map((cell) => cell.textContent);
+    expect(names).toEqual(["Óxidos de nitrógeno (NOx)", "Monóxido de carbono", "Partículas en suspensión totales"]);
+  });
+
+  test("the stations: the hour, the names, the numbers and the partial day", () => {
+    setLanguage("es");
+    show({ status: "card", card: card({ air_quality: stations() }) });
+
+    expect(root.querySelector(".updated")?.textContent).toBe("Último valor: 11 nov, 14:00 UTC");
+    expect(
+      [...root.querySelectorAll("section.air-quality tbody tr")].map((row) => [...row.querySelectorAll("th, td")].map((cell) => cell.textContent)),
+    ).toEqual([
+      ["Dióxido de nitrógeno", "19 µg/m³", "0,6× el valor guía de la OMS"],
+      ["H2S", "19 µg/m³", "0,6× el valor guía de la OMS (19 de 24 horas)"],
+    ]);
+  });
+
+  test("a pollutant of a station that the language names only for the emissions takes that name too, in Spanish and in Basque", () => {
+    const benzene = { year: 2023, pollutant: "BENZENE", name: "Benzene", declared_t: 1, t_km2: 1, who_ratio: null };
+    const withBenzene = () =>
+      card({
+        emissions: [...card().emissions, benzene],
+        air_quality: air({ stations: [station({ readings: [reading({ pollutant: "BENZENE", who_period: null, who_ratio: null })] })] }),
+      });
+    const nameInStation = () => root.querySelector("section.air-quality tbody th")?.textContent;
+
+    show({ status: "card", card: withBenzene() });
+    expect(nameInStation()).toBe("Benzene");
+
+    setLanguage("es");
+    show({ status: "card", card: withBenzene() });
+    expect(nameInStation()).toBe("Benceno");
+
+    setLanguage("eu");
+    show({ status: "card", card: withBenzene() });
+    expect(nameInStation()).toBe("Bentzenoa");
+  });
+
+  test("nothing to show, in words", () => {
+    setLanguage("es");
+
+    show({ status: "card", card: card({ air_quality: null }) });
+    expect(root.querySelector("p.none")?.textContent).toBe("La calidad del aire no está disponible en este momento.");
+
+    show({ status: "card", card: card({ air_quality: air({ measured: false, reason: "no_station", stations: [] }) }) });
+    expect(root.querySelector("p.none")?.textContent).toBe("No hay ninguna estación de calidad del aire en este municipio.");
+
+    show({ status: "card", card: card({ emissions: [] }) });
+    expect(root.textContent).toContain("Sin emisiones declaradas en 2023.");
+  });
+
+  test("loading and an error", () => {
+    setLanguage("es");
+
+    show({ status: "loading" });
+    expect(root.textContent).toContain("Cargando…");
+
+    show({ status: "error", message: "x" });
+    expect(root.querySelector("h2")?.textContent).toBe("Algo ha salido mal");
+  });
+});
+
+describe("the panel in Basque", () => {
+  test("the card, with the names and the columns in Basque", () => {
+    setLanguage("eu");
+    show({ status: "card", card: card({ air_quality: air() }) });
+
+    expect(root.querySelector(".meta")?.textContent).toBe("Udalerria · Cantábrica Alavesa · Araba / Álava · 37,3 km²");
+    expect(root.querySelector("caption")?.textContent).toBe("Aitortutako isuri industrialak, 2023");
+    expect([...root.querySelectorAll("tbody th")].slice(0, 3).map((cell) => cell.textContent)).toEqual([
+      "Nitrogeno oxidoak (NOx)",
+      "Karbono monoxidoa",
+      "Airean esekitako partikula guztiak",
+    ]);
+    expect(root.querySelector("h3")?.textContent).toBe("Aire kalitatea");
+    expect(root.querySelector(".updated")?.textContent).toBe("Azken balioa: aza. 11, 14:00 UTC");
+    expect(root.querySelector("button")?.getAttribute("aria-label")).toBe("Itxi panela");
+  });
+
+  test("nothing to show, in words", () => {
+    setLanguage("eu");
+
+    show({ status: "card", card: card({ air_quality: air({ measured: false, reason: "level_not_supported", stations: null }) }) });
+    expect(root.querySelector("p.none")?.textContent).toBe(
+      "Estazioak udalerrietan erakusten dira: aukeratu bat haren aire kalitatea ikusteko.",
+    );
+
+    show({ status: "card", card: card({ air_quality: air({ measured: false, reason: "something_new" as never, stations: [] }) }) });
+    expect(root.querySelector("p.none")?.textContent).toBe("Ez dago erakusteko aire kalitaterik unitate honetarako.");
+  });
+
+  test("a panel that is drawn again in another language has nothing left of the first one", () => {
+    setLanguage("es");
+    show({ status: "card", card: card({ air_quality: air() }) });
+    setLanguage("eu");
+    show({ status: "card", card: card({ air_quality: air() }) });
+
+    expect(root.textContent).not.toContain("Calidad del aire");
+    expect(root.textContent).not.toContain("Municipio");
+    expect(root.querySelectorAll("h3")).toHaveLength(1);
   });
 });

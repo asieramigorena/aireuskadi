@@ -73,11 +73,51 @@ body {
 
 #caption {
   margin: 0.15rem 0 0;
-  font-size: clamp(1.2rem, 1rem + 1.6vw, 2.1rem);
+  font-size: clamp(1.2rem, 1rem + 1.2vw, 1.7rem);
   font-weight: 650;
   line-height: 1.15;
   letter-spacing: -0.01em;
   text-wrap: balance;
+}
+
+/* The name of the page and, next to it, the language: one line that wraps on a narrow screen. */
+.brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.9rem;
+}
+
+/* The language of the page. Small, because it is not what the person came for; the one in use is
+ * filled and bold, so that it is seen without the colour. The caption lets the pointer through to the
+ * map; this does not. */
+.languages {
+  display: flex;
+  gap: 0.15rem;
+  pointer-events: auto;
+}
+
+.languages a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  color: var(--muted-on-sea);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+}
+
+.languages a:hover {
+  color: var(--text-on-sea);
+}
+
+.languages a[aria-current="true"] {
+  background: var(--text-on-sea);
+  color: var(--sea);
+  font-weight: 700;
 }
 
 /* The way to choose the map. The caption lets the pointer through to the map; these do not. */
@@ -371,6 +411,11 @@ body {
   white-space: normal;
 }
 
+/* The ratio of the emissions is a phrase ("OMEren gidalerroaren 0,4×" in Basque): it wraps. */
+#panel td.ratio {
+  white-space: normal;
+}
+
 /* A long word in the name of a pollutant must not push the table out of the panel. */
 #panel table.readings th {
   overflow-wrap: anywhere;
@@ -387,6 +432,14 @@ body {
 
 /* A finger needs more room than a pointer. */
 @media (pointer: coarse) {
+  .languages a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+
   .controls a,
   .controls select {
     display: inline-flex;

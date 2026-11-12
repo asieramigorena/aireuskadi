@@ -1,13 +1,16 @@
 // SPA entry point: it joins the router, the calls to the gateway, the map and the panel.
 import "../styles/style.css";
 import { createApi, failureText } from "./api";
-import { renderControls } from "./controls";
-import { formatDensity, mapCaption, mapLabel } from "./format";
+import { renderControls, renderLanguages } from "./controls";
+import { formatDensity, mapCaption } from "./format";
 import { HEXAGON_MAX_RADIUS, hexRadiusForZoom } from "./hexagons";
 import { buildAirLayers, buildLayers } from "./layers";
+import { createStatus } from "./status";
+import { detectLanguage, language, setLanguage, texts } from "./i18n";
 import { levelForZoom } from "./levels";
 import { renderLegend } from "./legend";
 import { createMap } from "./map";
+import { applyPageTexts } from "./page";
 import { renderPanel, type PanelView } from "./panel";
 import { DEFAULT_SELECTION, createRouter, homeUrl, unitUrl, type Selection, type State } from "./router";
 import { maxDensity } from "./scale";
@@ -51,9 +54,8 @@ const map = createMap(element<HTMLDivElement>("map"), (zoom) => {
 level = levelForZoom(map.initialZoom);
 hexRadius = hexRadiusForZoom(map.initialZoom);
 
-function say(text: string) {
-  status.textContent = text;
-}
+const line = createStatus(status);
+const say = line.say;
 
 function draw() {
   const air = selection!.view === "air";
@@ -69,9 +71,8 @@ function draw() {
   }
   element("attribution").textContent = units?.attribution ?? "";
   element("app").classList.toggle("air-view", air);
-  // The credit of what the map shows: the emissions or the stations.
-  element("emissions-credit").hidden = air;
-  element("air-credit").textContent = air && stations ? `Air quality: ${stations.attribution}` : "";
+  // The credit of what the map shows (the emissions, or the stations once they have arrived).
+  applyPageTexts(selection!.view, stations?.attribution ?? null);
 }
 
 /** Centre the map in what the panel leaves free. The layout box is read (not the one that is
@@ -90,8 +91,7 @@ function showPanel(view: PanelView) {
 }
 
 function failure(error: unknown) {
-  const text = failureText(error);
-  if (text !== null) say(text);
+  if (failureText(error) !== null) say(() => failureText(error) ?? "");
 }
 
 /** What the map shows, and the units of the level, in parallel: the map is drawn when both have
@@ -100,7 +100,7 @@ async function loadMap() {
   mapLoad.abort();
   mapLoad = new AbortController();
   const { signal } = mapLoad;
-  say("Loading the map…");
+  say(() => texts().loadingMap);
   try {
     if (selection!.view === "air") {
       // Apart: if only the stations fail (a pollutant that they do not have), the municipalities are
@@ -123,7 +123,7 @@ async function loadMap() {
       [points, units] = await Promise.all([api.points(selection!, signal), cachedUnits(signal)]);
       stations = null;
     }
-    say("");
+    say(() => "");
     draw();
   } catch (error) {
     // A load that was cancelled by a newer one leaves the map as it is: the newer one draws.
@@ -181,40 +181,48 @@ async function showUnit(code: string, station: number | null) {
 }
 
 function onState(state: State) {
-  const changed =
-    !selection ||
-    selection.view !== state.selection.view ||
-    selection.pollutant !== state.selection.pollutant ||
-    selection.year !== state.selection.year;
-  const viewChanged = !selection || selection.view !== state.selection.view;
+  const first = !selection;
+  const dataChanged =
+    first ||
+    selection!.view !== state.selection.view ||
+    selection!.pollutant !== state.selection.pollutant ||
+    selection!.year !== state.selection.year;
+  const viewChanged = first || selection!.view !== state.selection.view;
+  // The language that the person chose; if none, the one that the browser asks for (English if it is
+  // neither Basque nor Spanish).
+  const wanted = state.selection.lang ?? detectLanguage(navigator.languages?.length ? navigator.languages : [navigator.language]);
+  const languageChanged = first || wanted !== language();
   selection = state.selection;
-  if (changed) {
-    element("caption").textContent = mapCaption(selection);
-    element("map").setAttribute("aria-label", mapLabel(selection.view));
-    if (viewChanged) {
-      // What the other map showed is not drawn under the caption of this one while it loads.
-      points = [];
-      stations = null;
-      legendShown = "";
-      if (units) draw();
-      else renderLegend(element("legend"), selection.view, formatDensity(0));
-    }
-    void loadMap();
+  setLanguage(wanted);
+
+  if (viewChanged) {
+    // What the other map showed is not drawn under the caption of this one while it loads.
+    points = [];
+    stations = null;
   }
-  // The controls say the map that is shown, and keep the unit whose panel is open.
-  renderControls(
-    element("controls"),
-    selection,
-    state.route.name === "unit" ? state.route.code : null,
-    (url) => router.navigate(url),
-    state.route.name === "unit" ? state.route.station : null,
-  );
+  if (dataChanged || languageChanged) {
+    // Everything that is written is written again, in the language and for the map that is shown.
+    element("caption").textContent = mapCaption(selection);
+    applyPageTexts(selection.view, stations?.attribution ?? null);
+    line.refresh();
+    legendShown = "";
+    if (units) draw();
+    else renderLegend(element("legend"), selection.view, formatDensity(0));
+  }
+  if (dataChanged) void loadMap();
+
+  // The controls say the map and the language that are shown, and keep the unit whose panel is open.
+  const unit = state.route.name === "unit" ? state.route.code : null;
+  const chosenStation = state.route.name === "unit" ? state.route.station : null;
+  const go = (url: string) => router.navigate(url);
+  renderControls(element("controls"), selection, unit, go, chosenStation);
+  renderLanguages(element("languages"), wanted, selection, unit, go, chosenStation);
 
   cardLoad.abort();
   if (state.route.name === "unit") {
     void showUnit(state.route.code, state.route.station);
   } else if (state.route.name === "not-found") {
-    showPanel({ status: "error", message: "This page does not exist." });
+    showPanel({ status: "error", message: texts().pageNotFound });
   } else {
     showPanel({ status: "closed" });
   }
