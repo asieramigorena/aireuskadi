@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { setLanguage } from "../src/i18n";
 import { renderLegend } from "../src/legend";
 import { legendGradient, ratioLegendGradient } from "../src/scale";
 
@@ -95,5 +96,52 @@ describe("changing the view", () => {
 
     expect(root.querySelector("img")).toBeNull();
     expect((window as unknown as { __legend?: number }).__legend).toBeUndefined();
+  });
+});
+
+afterEach(() => setLanguage("en"));
+
+describe("the legend in Spanish and in Basque", () => {
+  test("the emissions, in Spanish", () => {
+    setLanguage("es");
+    renderLegend(root, "emissions", "57 t/km²");
+
+    expect(root.getAttribute("aria-label")).toBe("Color de las unidades");
+    expect(root.querySelector("p")?.textContent).toBe("Declarado por km² de cada unidad");
+    expect(root.querySelector(".no-data")?.textContent).toBe("Sin datos");
+  });
+
+  test("the air quality, in Spanish", () => {
+    setLanguage("es");
+    renderLegend(root, "air", "x");
+
+    expect(root.getAttribute("aria-label")).toBe("Color de las estaciones");
+    expect(root.querySelector("p")?.textContent).toBe("Último valor frente al valor guía de la OMS");
+    expect(texts(".legend-ends span")).toEqual(["0", "1× el valor guía", "2× o más"]);
+    expect(root.querySelector(".note")?.textContent).toBe("Columnas: estaciones. Suelo: media de las estaciones de cada municipio.");
+    expect(root.querySelector(".no-data")?.textContent).toBe("Sin estación o sin comparación");
+  });
+
+  test("the emissions and the air quality, in Basque", () => {
+    setLanguage("eu");
+    renderLegend(root, "emissions", "57 t/km²");
+    expect(root.getAttribute("aria-label")).toBe("Unitateen kolorea");
+    expect(root.querySelector(".no-data")?.textContent).toBe("Daturik ez");
+
+    renderLegend(root, "air", "x");
+    expect(root.getAttribute("aria-label")).toBe("Estazioen kolorea");
+    // Short enough that the three labels fit in the legend and do not touch.
+    expect(texts(".legend-ends span")).toEqual(["0", "1× gidalerroa", "≥ 2×"]);
+    expect(root.querySelector(".no-data")?.textContent).toBe("Estaziorik edo konparaziorik ez");
+  });
+
+  test("drawn again in another language, nothing is left of the first one", () => {
+    setLanguage("es");
+    renderLegend(root, "air", "x");
+    setLanguage("eu");
+    renderLegend(root, "air", "x");
+
+    expect(root.textContent).not.toContain("guía");
+    expect(root.textContent).toContain("gidalerroa");
   });
 });

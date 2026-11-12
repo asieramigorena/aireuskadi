@@ -1,6 +1,7 @@
 // The router: which screen the URL asks for, and the History API so that Back works. The view of
-// the map, its pollutant and its year live in the query of the URL, so a link shows what the person
-// saw.
+// the map, its pollutant and its year, and the language if the person chose one, live in the query
+// of the URL, so a link shows what the person saw.
+import { isLanguage, type Language } from "./i18n";
 
 /** `station` is the id of the station of the unit that is open in its panel, if the address says one:
  * a click on a station of the map of the air quality opens its unit with that station shown. */
@@ -13,6 +14,8 @@ export type Route =
 export type View = "emissions" | "air";
 
 export interface Selection {
+  /** The language that the person chose (`?lang=`). Absent: the browser decides (see i18n). */
+  lang?: Language | null;
   view: View;
   pollutant: string;
   /** Of the emissions. The air quality is the latest value of each station: it has no year. */
@@ -43,10 +46,13 @@ export function parseLocation(pathname: string, search: string): State {
   const view: View = query.get("view") === "air" ? "air" : "emissions";
   const pollutant = query.get("pollutant") ?? "";
   const year = query.get("year") ?? "";
+  const lang = query.get("lang") ?? "";
   const selection: Selection = {
     view,
     pollutant: POLLUTANT.test(pollutant) ? pollutant : DEFAULT_POLLUTANT[view],
     year: YEAR.test(year) && Number(year) >= 1 ? Number(year) : DEFAULT_SELECTION.year,
+    // Only a language that the page has, and only when there is one: the key is not there otherwise.
+    ...(isLanguage(lang) ? { lang } : {}),
   };
 
   if (pathname === "/") return { route: { name: "home" }, selection };
@@ -66,6 +72,7 @@ function selectionQuery(selection: Selection): string {
   if (selection.view === "emissions" && selection.year !== DEFAULT_SELECTION.year) {
     query.set("year", String(selection.year));
   }
+  if (selection.lang) query.set("lang", selection.lang);
   const text = query.toString();
   return text ? `?${text}` : "";
 }

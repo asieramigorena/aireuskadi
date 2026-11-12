@@ -151,3 +151,40 @@ describe("the legend of the air quality", () => {
     expect(short.slice(0, short.indexOf("\n}\n"))).toMatch(/\.air-view \.legend \{[^}]*width:\s*12rem/);
   });
 });
+
+describe("the ratio of the emissions", () => {
+  test("wraps, or a long phrase (Basque) pushes the table out of the panel, which hides what overflows", () => {
+    expect(rule("#panel td.ratio")).toMatch(/white-space:\s*normal/);
+  });
+});
+
+describe("the selector of the language", () => {
+  test("can be clicked: the caption around it lets the pointer through to the map, and it does not", () => {
+    expect(rule(".languages")).toMatch(/pointer-events:\s*auto/);
+  });
+
+  test("the language in use is filled and bold, so it is seen without the colour", () => {
+    const current = rule('.languages a[aria-current="true"]');
+
+    expect(current).toMatch(/background:/);
+    expect(current).toMatch(/font-weight:\s*[6-9][0-9]0/);
+  });
+
+  test("sits next to the name of the page, on one line that wraps when the screen is narrow", () => {
+    expect(rule(".brand")).toMatch(/display:\s*flex/);
+    expect(rule(".brand")).toMatch(/flex-wrap:\s*wrap/);
+  });
+
+  test("with a pointer, each language is at least 24 px high, as a target needs", () => {
+    expect(rule(".languages a")).toMatch(/min-height:\s*1\.5rem/);
+  });
+
+  test("on a finger, each language is 44 px or more on both sides", () => {
+    const coarse = css.slice(css.indexOf("@media (pointer: coarse)"));
+    const block = coarse.slice(0, coarse.indexOf("\n}\n"));
+    const languages = block.slice(block.indexOf(".languages a"), block.indexOf("}", block.indexOf(".languages a")));
+
+    expect(languages).toMatch(/min-height:\s*2\.75rem/);
+    expect(languages).toMatch(/min-width:\s*2\.75rem/);
+  });
+});

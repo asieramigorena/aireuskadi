@@ -3,43 +3,30 @@
 // another one.
 import type { Level, Point, StationCollection, UnitCard, UnitCollection } from "./types";
 import { errorText } from "./format";
+import { texts } from "./i18n";
 import type { Selection } from "./router";
 
 const PREFIX = "/api/v1";
 
 /** Something that went wrong with a call. `status` is 0 when the gateway could not be reached. */
 export class ApiError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
+  // The message is fixed (for the log): what the service says is not kept, because it is in English
+  // and could say things about the inside. The page speaks by the code (`errorText`).
+  constructor(readonly status: number) {
+    super(`The call failed with status ${status}.`);
     this.name = "ApiError";
   }
 }
 
-/** What the status line says when a load fails: nothing for a call that was cancelled (whoever
- * cancelled it knows), what the gateway said for an error of the service, and a fixed text for
- * anything else: the message of an error of the code ("x is not iterable") says things about the
- * inside and means nothing to the person. */
+/** What the status line says when a load fails, in the language of the page: nothing for a call that
+ * was cancelled (whoever cancelled it knows), words for the code of an error of the service (what
+ * the gateway wrote is in English and is not shown), and a fixed text for anything else: the message
+ * of an error of the code ("x is not iterable") says things about the inside and means nothing to the
+ * person. */
 export function failureText(error: unknown): string | null {
   if (error instanceof DOMException && error.name === "AbortError") return null;
-  if (error instanceof ApiError) return errorText(error.status, error.message);
-  return "The service is not available right now.";
-}
-
-async function problemDetail(response: Response): Promise<string> {
-  // The gateway answers its errors as problem documents (RFC 9457). Anything else (a page of an
-  // intermediary, a crash) is not shown: it says things about the inside.
-  if (response.headers.get("content-type")?.includes("application/problem+json")) {
-    try {
-      const body = await response.json();
-      if (typeof body.detail === "string") return body.detail;
-    } catch {
-      // not a document after all
-    }
-  }
-  return "The service is not available right now.";
+  if (error instanceof ApiError) return errorText(error.status);
+  return texts().serviceUnavailable;
 }
 
 export function createApi(fetchFn: typeof fetch = (...args) => fetch(...args)) {
@@ -51,9 +38,9 @@ export function createApi(fetchFn: typeof fetch = (...args) => fetch(...args)) {
     } catch (error) {
       // A cancelled call is not a failure of the service: whoever cancelled it knows.
       if (error instanceof DOMException && error.name === "AbortError") throw error;
-      throw new ApiError(0, "The service cannot be reached.");
+      throw new ApiError(0);
     }
-    if (!response.ok) throw new ApiError(response.status, await problemDetail(response));
+    if (!response.ok) throw new ApiError(response.status);
     return (await response.json()) as T;
   }
 

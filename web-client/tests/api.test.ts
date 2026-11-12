@@ -1,5 +1,6 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { ApiError, createApi, failureText } from "../src/api";
+import { setLanguage } from "../src/i18n";
 
 const SELECTION = { view: "emissions" as const, pollutant: "NOX", year: 2023 };
 
@@ -108,7 +109,7 @@ describe("the calls go only to the gateway, to the routes of /api/v1", () => {
 });
 
 describe("what goes wrong", () => {
-  test("an error of the gateway is an ApiError with its status and the detail of its problem document", async () => {
+  test("an error of the gateway is an ApiError with its status, and its message is not the one of the service", async () => {
     const problem = { type: "about:blank", title: "Not Found", status: 404, detail: "Unit 99999 not found." };
     const { api } = apiWith(answer(problem, 404, "application/problem+json"));
 
@@ -116,7 +117,8 @@ describe("what goes wrong", () => {
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(404);
-    expect(error.message).toBe("Unit 99999 not found.");
+    expect(error.message).toBe("The call failed with status 404.");
+    expect(error.message).not.toContain("Unit 99999");
   });
 
   test("a 422 says what was wrong and does not break the page", async () => {
@@ -129,14 +131,14 @@ describe("what goes wrong", () => {
     expect(error.status).toBe(422);
   });
 
-  test("an answer that is not a problem document gets a fixed message, not the text of the body", async () => {
+  test("an answer with a body that is not a problem document gets the same message, not the text of the body", async () => {
     const { api } = apiWith(new Response("<html>Traceback: secret</html>", { status: 502 }));
 
     const error = await api.unit("01036").catch((e) => e);
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(502);
-    expect(error.message).toBe("The service is not available right now.");
+    expect(error.message).toBe("The call failed with status 502.");
     expect(error.message).not.toContain("secret");
   });
 
@@ -147,7 +149,7 @@ describe("what goes wrong", () => {
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(0);
-    expect(error.message).toBe("The service cannot be reached.");
+    expect(error.message).toBe("The call failed with status 0.");
   });
 
   test("a call that was cancelled is not an error of the service: the cancellation is passed on", async () => {
@@ -165,12 +167,27 @@ describe("failureText: what the status line says when a load fails", () => {
     expect(failureText(new DOMException("aborted", "AbortError"))).toBeNull();
   });
 
-  test("an error of the service says what the gateway said, and a 422 is put in words", () => {
-    expect(failureText(new ApiError(404, "Unit 99999 not found."))).toBe("Unit 99999 not found.");
-    expect(failureText(new ApiError(422, "The request has errors."))).toBe(
+  test("an error of the service is said by its code, in words of the page", () => {
+    expect(failureText(new ApiError(404))).toBe("That page or unit does not exist.");
+    expect(failureText(new ApiError(422))).toBe(
       "There is no data for that pollutant and year. Try another year.",
     );
-    expect(failureText(new ApiError(0, "The service cannot be reached."))).toBe("The service cannot be reached.");
+    expect(failureText(new ApiError(0))).toBe("The service cannot be reached.");
+    expect(failureText(new ApiError(502))).toBe(
+      "The service is not available right now.",
+    );
+  });
+
+  afterEach(() => setLanguage("en"));
+
+  test("and in the language of the page", () => {
+    setLanguage("es");
+    expect(failureText(new ApiError(404))).toBe("Esa página o unidad no existe.");
+    expect(failureText(new TypeError("x is not iterable"))).toBe("El servicio no está disponible en este momento.");
+
+    setLanguage("eu");
+    expect(failureText(new ApiError(404))).toBe("Orri edo unitate hori ez da existitzen.");
+    expect(failureText(new ApiError(0))).toBe("Ezin da zerbitzuarekin konektatu.");
   });
 
   test.each([

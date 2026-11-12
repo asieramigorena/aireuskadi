@@ -2,6 +2,7 @@
 // detail of an error) is written with `textContent`, never as HTML: it is free text.
 import {
   airPollutantName,
+  emissionName,
   formatArea,
   formatDensity,
   formatHour,
@@ -10,6 +11,7 @@ import {
   formatReadingRatio,
   formatTonnes,
 } from "./format";
+import { texts } from "./i18n";
 import type { Selection } from "./router";
 import type { UnitAirQuality, UnitCard, UnitStation } from "./types";
 
@@ -19,8 +21,6 @@ export type PanelView =
   | { status: "error"; message: string }
   // `station` is the id of the station that the person chose on the map: it is shown open, at the top.
   | { status: "card"; card: UnitCard; station?: number | null };
-
-const KIND = { municipality: "Municipality", district: "District", territory: "Territory" };
 
 function element<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -37,7 +37,7 @@ function header(title: string, onClose: () => void): HTMLElement {
   const bar = element("header");
   const close = element("button", "×");
   close.type = "button";
-  close.setAttribute("aria-label", "Close the panel");
+  close.setAttribute("aria-label", texts().closePanel);
   close.addEventListener("click", onClose);
   bar.append(element("h2", title), close);
   return bar;
@@ -46,15 +46,16 @@ function header(title: string, onClose: () => void): HTMLElement {
 function emissionsTable(card: UnitCard, selection: Selection): HTMLElement {
   const rows = card.emissions.filter((emission) => emission.year === selection.year);
   if (rows.length === 0) {
-    return element("p", `No declared emissions in ${selection.year}.`);
+    return element("p", texts().noEmissions(selection.year));
   }
   const table = element("table");
-  table.append(element("caption", `Declared industrial emissions in ${selection.year}`));
+  table.append(element("caption", texts().emissionsCaption(selection.year)));
   // The ratio with the WHO guideline is only there when there is one to show: while no pollutant
   // has it, the column would be "No data" in every row and would take the width of the others.
   const withRatio = rows.some((emission) => emission.who_ratio !== null);
   const head = element("tr");
-  for (const title of ["Pollutant", "Declared", "Per km²", ...(withRatio ? ["WHO guideline"] : [])]) {
+  const { columns } = texts();
+  for (const title of [columns.pollutant, columns.declared, columns.perKm2, ...(withRatio ? [columns.guideline] : [])]) {
     const cell = element("th", title);
     cell.scope = "col";
     head.append(cell);
@@ -69,29 +70,27 @@ function emissionsTable(card: UnitCard, selection: Selection): HTMLElement {
     if (selection.view === "emissions" && emission.pollutant === selection.pollutant) {
       row.setAttribute("aria-current", "true");
     }
-    const name = element("th", emission.name);
+    const name = element("th", emissionName(emission.pollutant, emission.name));
     name.scope = "row";
     row.append(
       name,
       element("td", formatTonnes(emission.declared_t)),
       element("td", formatDensity(emission.t_km2)),
     );
-    if (withRatio) row.append(element("td", formatRatio(emission.who_ratio)));
+    if (withRatio) row.append(element("td", formatRatio(emission.who_ratio), "ratio"));
     body.append(row);
   }
   table.append(body);
   return table;
 }
 
-const NOT_AVAILABLE = "Air quality is not available right now.";
-
-// Why there is nothing to show, in words: the API gives only a code. A Map, so that a code that is
-// the name of something that every object has (like "toString") finds nothing.
-const NO_MEASUREMENT = new Map([
-  ["no_station", "There is no air quality station in this municipality."],
-  ["no_data", "The stations of this municipality have no values yet."],
-  ["level_not_supported", "Stations are shown for municipalities: choose one to see its air quality."],
-]);
+/** Why there is nothing to show, in words: the API gives only a code. An own property of the table
+ * only, so that a code that is the name of something that every object has (like "toString") finds
+ * nothing and the generic text is said. */
+function noMeasurement(reason: string | null): string {
+  const table: Record<string, string> = texts().noMeasurement;
+  return reason !== null && reason !== "other" && Object.hasOwn(table, reason) ? table[reason] : table.other;
+}
 
 function stationBlock(
   station: UnitStation,
@@ -105,16 +104,17 @@ function stationBlock(
   if (chosen) block.setAttribute("aria-current", "true");
   block.append(element("summary", station.name));
   if (station.readings.length === 0) {
-    block.append(element("p", "No values yet.", "none"));
+    block.append(element("p", texts().noValues, "none"));
     return block;
   }
   // A loop and not Math.max(...list): a list that is long enough cannot be spread.
   const newest = station.readings.reduce((latest, reading) => Math.max(latest, Date.parse(reading.ts)), -Infinity);
-  block.append(element("p", `Latest value: ${formatHour(new Date(newest).toISOString())}`, "updated"));
+  block.append(element("p", texts().latestValue(formatHour(new Date(newest).toISOString())), "updated"));
 
   const table = element("table", undefined, "readings");
   const head = element("tr");
-  for (const title of ["Pollutant", "Latest", "WHO guideline"]) {
+  const { columns } = texts();
+  for (const title of [columns.pollutant, columns.latest, columns.guideline]) {
     const cell = element("th", title);
     cell.scope = "col";
     head.append(cell);
@@ -142,17 +142,14 @@ function stationBlock(
 
 function airQualitySection(air: UnitAirQuality | null, card: UnitCard, chosen: number | null): HTMLElement {
   const section = element("section", undefined, "air-quality");
-  section.append(element("h3", "Air quality"));
+  section.append(element("h3", texts().airQuality));
   if (air === null) {
-    section.append(element("p", NOT_AVAILABLE, "none"));
+    section.append(element("p", texts().airUnavailable, "none"));
     return section;
   }
-  if (!air.measured) {
-    const reason = air.reason ? NO_MEASUREMENT.get(air.reason) : undefined;
-    section.append(element("p", reason ?? "There is no air quality to show for this unit.", "none"));
-  }
+  if (!air.measured) section.append(element("p", noMeasurement(air.reason), "none"));
   const stations = air.stations ?? [];
-  const names = new Map(card.emissions.map((emission) => [emission.pollutant, emission.name]));
+  const names = new Map(card.emissions.map((emission) => [emission.pollutant, emissionName(emission.pollutant, emission.name)]));
   // One station is shown open; a list of them is closed so that the names can be read at once.
   for (const station of stations) {
     section.append(stationBlock(station, stations.length === 1, station.id === chosen, names));
@@ -187,10 +184,10 @@ export function renderPanel(
     case "closed":
       return;
     case "loading":
-      root.append(header("Loading…", onClose));
+      root.append(header(texts().loading, onClose));
       return;
     case "error": {
-      root.append(header("Something went wrong", onClose));
+      root.append(header(texts().somethingWrong, onClose));
       const alert = element("p", view.message);
       alert.setAttribute("role", "alert");
       root.append(alert);
@@ -199,7 +196,7 @@ export function renderPanel(
     case "card": {
       const { card } = view;
       root.append(header(card.name, onClose));
-      const places = [KIND[card.level], card.district?.name, card.territory?.name, formatArea(card.area_km2)];
+      const places = [texts().kinds[card.level], card.district?.name, card.territory?.name, formatArea(card.area_km2)];
       root.append(element("p", places.filter(Boolean).join(" · "), "meta"));
       // What the map shows comes first: the table of emissions or the stations.
       const emissions = emissionsTable(card, selection);
