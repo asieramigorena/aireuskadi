@@ -19,6 +19,7 @@ COPY pyproject.toml uv.lock ./
 COPY packages/db packages/db
 COPY packages/http packages/http
 COPY packages/logger packages/logger
+COPY services/auth-service/pyproject.toml services/auth-service/pyproject.toml
 COPY services/api-gateway/pyproject.toml services/api-gateway/pyproject.toml
 COPY services/emissions-service/pyproject.toml services/emissions-service/pyproject.toml
 COPY services/ingestion-worker services/ingestion-worker
