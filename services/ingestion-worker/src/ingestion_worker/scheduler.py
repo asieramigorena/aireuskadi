@@ -1,15 +1,16 @@
-"""Runs the loads when they are due, for as long as the worker is up.
+"""Runs the loads when they are due, for as long as the worker is up. APScheduler is the clock: it
+makes a pass every 30 seconds; this module decides, in each pass, which loads are due.
 
 The memory of the scheduler is core.ingestion_run: it asks when each source last succeeded, so a
 restart of the container does not lose anything and no other state is needed.
 """
 
 import logging
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+from apscheduler.schedulers.blocking import BlockingScheduler
 from sqlalchemy import Engine, text
 
 log = logging.getLogger(__name__)
@@ -59,23 +60,30 @@ def run_due_jobs(jobs: list[Job], history: dict[str, RunHistory], now: datetime)
             log.error("job failed", extra={"source": job.source, "error": str(error)})
 
 
-def run_loop(
+def build_scheduler(
     jobs: list[Job],
     read: Callable[[], dict[str, RunHistory]],
     now: Callable[[], datetime],
-    sleep: Callable[[float], None],
     tick: timedelta = timedelta(seconds=30),
-    once: bool = False,
-    should_stop: Callable[[], bool] = lambda: False,
-) -> None:
-    """Looks at what is due, runs it and sleeps `tick`. With `once` it does a single pass, which
-    is what a cron needs. The clock and the sleep are parameters so that a test can simulate hours
-    in no time."""
-    while True:
-        run_due_jobs(jobs, read(), now())
-        if once or should_stop():
-            return
-        sleep(tick.total_seconds())
+) -> BlockingScheduler:
+    """APScheduler, with one job: a pass of the loads that are due (run_due_jobs) every `tick`,
+    the first one at once. What is due is decided by the history (`read`), not by APScheduler,
+    which keeps nothing: so a restart of the container loses nothing. `read` and `now` are
+    parameters so that a test can give them."""
+    scheduler = BlockingScheduler(timezone=UTC)
+    scheduler.add_job(
+        lambda: run_due_jobs(jobs, read(), now()),
+        "interval",
+        seconds=tick.total_seconds(),
+        next_run_time=datetime.now(UTC),
+        id="due-loads",
+        name="the loads that are due",
+        # A pass that takes longer than the tick (a big download) is not started twice, and the
+        # passes that were missed meanwhile are one.
+        max_instances=1,
+        coalesce=True,
+    )
+    return scheduler
 
 
 def read_history(engine: Engine) -> dict[str, RunHistory]:
@@ -122,16 +130,19 @@ def run_scheduler(
     """The scheduler of the worker. It first closes the runs that a restart left in `running`, so
     they do not count as an attempt in progress, and then runs the jobs that are due: forever, or
     in a single pass with `once`."""
+    # APScheduler writes two lines at every pass (every 30 s), and a warning at every tick while a
+    # long load runs ("maximum number of running instances reached"): only its errors.
+    logging.getLogger("apscheduler").setLevel(logging.ERROR)
     closed = close_stale_runs(engine, stale_after)
     log.info(
         "scheduler started",
         extra={"jobs": [job.source for job in jobs], "once": once, "stale_runs_closed": closed},
     )
-    run_loop(
-        jobs,
-        read=lambda: read_history(engine),
-        now=lambda: datetime.now(UTC),
-        sleep=time.sleep,
-        tick=tick,
-        once=once,
-    )
+
+    def read() -> dict[str, RunHistory]:
+        return read_history(engine)
+
+    if once:
+        run_due_jobs(jobs, read(), datetime.now(UTC))
+        return
+    build_scheduler(jobs, read, lambda: datetime.now(UTC), tick).start()
