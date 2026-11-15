@@ -120,6 +120,28 @@ body {
   font-weight: 700;
 }
 
+/* The way in for the admins: a round button like the ones that choose the map, but as small and
+ * quiet as the languages, because it is not for the visitors. */
+.admin-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  padding: 0.1rem 0.7rem;
+  border: 1px solid var(--sea-line);
+  border-radius: 999px;
+  background: rgb(13 30 38 / 0.6);
+  color: var(--muted-on-sea);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  pointer-events: auto;
+}
+
+.admin-link:hover {
+  border-color: var(--muted-on-sea);
+  color: var(--text-on-sea);
+}
+
 /* The way to choose the map. The caption lets the pointer through to the map; these do not. */
 .controls {
   display: flex;
@@ -432,6 +454,10 @@ body {
 
 /* A finger needs more room than a pointer. */
 @media (pointer: coarse) {
+  .admin-link {
+    min-height: 2.75rem;
+  }
+
   .languages a {
     display: inline-flex;
     align-items: center;

@@ -21,6 +21,14 @@ export function applyPageTexts(view: View, stationsAttribution: string | null): 
   label("panel", words.panelLabel);
   label("map", mapLabel(view));
 
+  // The way in for the admins: a plain link to the login page, which the auth service makes, in the
+  // language of the map.
+  const adminLink = byId("admin-link");
+  if (adminLink) {
+    adminLink.textContent = words.adminLink;
+    adminLink.setAttribute("href", `/admin?lang=${language()}`);
+  }
+
   // The credit of what the map shows: the emissions, or the stations.
   const emissionsCredit = byId("emissions-credit");
   if (emissionsCredit) {

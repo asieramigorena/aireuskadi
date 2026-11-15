@@ -13,6 +13,7 @@ export const eu: Texts = {
 
   mapChoiceLabel: "Aukeratu mapa",
   languageChoiceLabel: "Hizkuntza",
+  adminLink: "Admin sarbidea",
   panelLabel: "Unitatearen xehetasunak",
   emissionsCredit: "Isuriak: E-PRTR erregistroa, Open Data Euskadi, CC BY 4.0.",
   airCredit: (attribution) => `Aire kalitatea: ${attribution}`,

@@ -22,6 +22,8 @@ export interface Texts {
   // The page.
   mapChoiceLabel: string;
   languageChoiceLabel: string;
+  /** The link of the header to the login of the admins (Grafana and the accounts). */
+  adminLink: string;
   panelLabel: string;
   emissionsCredit: string;
   airCredit: (attribution: string) => string;
