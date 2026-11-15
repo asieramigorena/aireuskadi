@@ -13,11 +13,12 @@ def test_the_parameters_that_are_not_in_the_list_of_the_route_are_dropped(client
     assert "admin" not in str(sent.url)
 
 
-def test_a_parameter_that_comes_twice_is_sent_twice_and_the_service_decides(client, emissions):
+def test_a_parameter_that_comes_twice_is_sent_once_with_its_last_value(client, emissions):
+    # The last one is the one that the service would take; the others only made new cache entries.
     client.get("/api/v1/units?level=municipality&pollutant=NOX&year=2023&year=2022")
 
     (sent,) = emissions.requests
-    assert sent.url.params.get_list("year") == ["2023", "2022"]
+    assert sent.url.params.get_list("year") == ["2022"]
 
 
 def test_the_values_of_the_parameters_cannot_change_the_path_that_is_asked(client, emissions):

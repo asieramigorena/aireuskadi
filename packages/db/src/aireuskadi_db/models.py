@@ -1,4 +1,4 @@
-"""Tables of the core schema.
+"""Tables of the core schema (the data) and of the auth schema (the accounts).
 
 Emissions (kg or t per year, declared by facilities or estimated by the regional
 inventory) and concentrations (µg/m3, measured by stations) are kept separate.
@@ -11,6 +11,7 @@ from decimal import Decimal
 from geoalchemy2 import Geometry
 from sqlalchemy import (
     CHAR,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -25,7 +26,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from aireuskadi_db.base import Base
+from aireuskadi_db.base import AUTH_SCHEMA, Base
 
 SRID = 4326
 
@@ -250,3 +251,26 @@ class IngestionRun(Base):
         Integer, default=0, comment="rows left out; each one is logged with its reason"
     )
     error: Mapped[str | None] = mapped_column(Text)
+
+
+class AppUser(Base):
+    """An account of the site: a name and a password. Only an admin (``is_admin``) can open
+    Grafana. It lives in the schema ``auth``, apart from the data: the services that answer the
+    public cannot read it."""
+
+    __tablename__ = "app_user"
+    __table_args__ = (
+        # Grafana does not tell "User1" from "user1": names are kept in lower case only.
+        CheckConstraint("username = lower(username)", name="app_user_username_lower_case"),
+        {"schema": AUTH_SCHEMA},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True)
+    # A bcrypt hash, never the password. Google accounts have none.
+    hashed_password: Mapped[str | None] = mapped_column(String(255))
+    google_sub: Mapped[str | None] = mapped_column(String(255), unique=True)
+    # Only to show who an account is in the list of accounts: never used to log in.
+    email: Mapped[str | None] = mapped_column(String(255))
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

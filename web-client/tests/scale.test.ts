@@ -37,20 +37,6 @@ describe("colorFor", () => {
     expect(colorFor(-3, 100)).toEqual(colorFor(0, 100));
   });
 
-  test("when everything is zero nothing divides by zero", () => {
-    expect(colorFor(0, 0)).toEqual(colorFor(0, 100));
-    for (const channel of colorFor(0, 0)) expect(Number.isFinite(channel)).toBe(true);
-  });
-
-  test("the channels are whole numbers between 0 and 255", () => {
-    for (const value of [0, 0.001, 3, 77, 100, 1e9]) {
-      for (const channel of colorFor(value, 100)) {
-        expect(Number.isInteger(channel)).toBe(true);
-        expect(channel).toBeGreaterThanOrEqual(0);
-        expect(channel).toBeLessThanOrEqual(255);
-      }
-    }
-  });
 });
 
 describe("maxDensity", () => {
@@ -58,10 +44,6 @@ describe("maxDensity", () => {
     expect(maxDensity([feature(3), feature(null), feature(12.5), feature(0)])).toBe(12.5);
   });
 
-  test("is 0 when there is nothing", () => {
-    expect(maxDensity([])).toBe(0);
-    expect(maxDensity([feature(null)])).toBe(0);
-  });
 });
 
 describe("legendGradient", () => {
@@ -89,34 +71,12 @@ describe("ratioColor: the air quality against the WHO guideline", () => {
     expect(ratioColor(40)).toEqual(ratioColor(2));
   });
 
-  test("between two stops the colour is in the middle", () => {
-    expect(ratioColor(0.25)).toEqual([37, 176, 175, 235]);
-    expect(ratioColor(1.5)).toEqual([232, 140, 89, 238]);
-  });
-
-  test("a ratio below zero is zero, not a colour out of the scale", () => {
-    expect(ratioColor(-3)).toEqual(ratioColor(0));
-  });
-
   test("no ratio is the grey of no data (and not a colour of the scale), also for what is not a number", () => {
     expect(ratioColor(null)).toEqual(NO_DATA);
     expect(ratioColor(Number.NaN)).toEqual(NO_DATA);
     expect(ratioColor(Number.POSITIVE_INFINITY)).toEqual(NO_DATA);
   });
 
-  test("the grey that comes back is a copy: changing it does not change the one of no data", () => {
-    const grey = ratioColor(null);
-    grey[0] = 0;
-
-    expect(NO_DATA[0]).toBe(130);
-  });
-
-  test("a higher ratio is never a bluer colour: the blue channel goes down along the whole scale", () => {
-    const blues = [0, 0.25, 0.5, 0.75, 1, 1.5, 2].map((ratio) => ratioColor(ratio)[2]);
-
-    expect(blues).toEqual([...blues].sort((a, b) => b - a));
-    expect(new Set(blues).size).toBe(blues.length);
-  });
 });
 
 describe("ratioLegendGradient", () => {

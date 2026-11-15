@@ -14,7 +14,7 @@
 #                                  # is the secret aireuskadi-tailscale-authkey of the Vault
 #   docker compose --env-file .env --env-file /run/aireuskadi/secrets.env -f docker-compose.prod.yml up -d
 #                                  # what the unit does; by hand, only after fetch-secrets.sh has run
-# Watchtower asks every five minutes for a new :pro image of the four application services and
+# Watchtower asks every five minutes for a new :pro image of the five application services and
 # restarts them. The database is not updated by it: a new image of PostgreSQL can change the format
 # of the data, so that one is changed by hand.
 # db-init runs at each `docker compose up -d`, not when Watchtower updates a service: after a release that
@@ -55,8 +55,9 @@ services:
     restart: unless-stopped
     logging: *logging
 
-  # Runs once at each start: creates the schema and the read-only role if they are missing, and
-  # changes the password of the role if it changed. The services that read wait for it.
+  # Runs once at each start: brings the schema up to date and creates the read-only role and the
+  # role of the auth service if they are missing (or changes their passwords if they changed). The
+  # services that read wait for it.
   db-init:
     image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-ingestion-worker:${IMAGE_TAG:-pro}
     entrypoint: ["aireuskadi-db-init"]
@@ -64,6 +65,8 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       POSTGRES_READER_USER: ${POSTGRES_READER_USER:?set it in .env}
       POSTGRES_READER_PASSWORD: ${POSTGRES_READER_PASSWORD:?it comes from the Vault (see deploy/fetch-secrets.sh)}
+      POSTGRES_AUTH_USER: ${POSTGRES_AUTH_USER:?set it in .env}
+      POSTGRES_AUTH_PASSWORD: ${POSTGRES_AUTH_PASSWORD:?it comes from the Vault (see deploy/fetch-secrets.sh)}
     depends_on:
       postgres:
         condition: service_healthy
@@ -111,6 +114,28 @@ services:
       retries: 3
       start_period: 15s
 
+  # The accounts: login with JWT, the admin pages, and /me, which the gateway asks before it opens
+  # Grafana. The only service that reads the accounts and the only one that knows JWT_SECRET.
+  auth-service:
+    <<: *application
+    image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-auth-service:${IMAGE_TAG:-pro}
+    environment:
+      AUTH_DATABASE_URL: postgresql+psycopg://${POSTGRES_AUTH_USER}:${POSTGRES_AUTH_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET:?it comes from the Vault (see deploy/fetch-secrets.sh)}
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   # The only way in: the page and the API. No port is published: the tunnel reaches it by name.
   api-gateway:
     <<: *application
@@ -118,12 +143,17 @@ services:
     environment:
       EMISSIONS_URL: http://emissions-service:8000
       AIR_QUALITY_URL: http://air-quality-service:8000
-    # It also joins `edge`, the only network the tunnel is on.
-    networks: [default, edge]
+      AUTH_URL: http://auth-service:8000
+      GRAFANA_URL: http://grafana:3000
+    # It also joins `edge`, the only network the tunnel is on, and `monitoring`, the only one
+    # Grafana is on.
+    networks: [default, edge, monitoring]
     depends_on:
       emissions-service:
         condition: service_healthy
       air-quality-service:
+        condition: service_healthy
+      auth-service:
         condition: service_healthy
     healthcheck:
       test:
@@ -150,7 +180,7 @@ services:
       db-init:
         condition: service_completed_successfully
 
-  # Updates the four services above when a new :pro image appears. It is the maintained fork:
+  # Updates the five services above when a new :pro image appears. It is the maintained fork:
   # the original containrrr/watchtower was archived in December 2025 and does not work with
   # Docker 29 or later. If the images are private it reads the token of GHCR from the docker login
   # of the VM; with public images it needs none.
@@ -198,9 +228,116 @@ services:
     restart: unless-stopped
     logging: *logging
 
+  # Centralised logs and metrics. Alloy reads the logs of every container and sends them to Loki,
+  # and the metrics (state, CPU, memory...) to Prometheus; Grafana shows both. They are on the
+  # network `monitoring` only, which the gateway shares with them and nothing else does: Grafana
+  # trusts the user that the gateway names (auth proxy), so nothing else may reach it.
+  # The same as in docker-compose.yml. The images are pinned, so Watchtower does not update them.
+  loki:
+    image: grafana/loki:3.5.7
+    command: -config.file=/etc/loki/config.yml
+    volumes:
+      - ./observability/loki.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+    networks: [monitoring]
+    restart: unless-stopped
+    logging: *logging
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks: [monitoring]
+    restart: unless-stopped
+    logging: *logging
+
+  alloy:
+    image: grafana/alloy:v1.20.1
+    command:
+      - run
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./observability/alloy.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy/data
+      # Read access to the logs of the other containers. The Docker socket gives full control of
+      # Docker even when mounted read-only, so no other service gets it.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /run/containerd/containerd.sock:/run/containerd/containerd.sock:ro
+      # The cAdvisor inside Alloy reads the cgroups and the data of Docker (read only) to get the
+      # CPU, the memory and the network of each container.
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks: [monitoring]
+    depends_on:
+      - loki
+      - prometheus
+    restart: unless-stopped
+    logging: *logging
+
+  grafana:
+    image: grafana/grafana:12.0.0
+    environment:
+      # The full admin of Grafana is the account of the site with this name.
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?set it in .env (the account that is the full admin of Grafana)}
+      # Never used to log in (the form and basic auth are off), but Grafana needs one for the admin
+      # it creates.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-me}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # It lives at /grafana/ of the site, behind the gateway.
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      # Auth proxy: no login of its own; it trusts the name that the gateway puts in X-WEBAUTH-USER
+      # and makes the user the first time.
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: X-WEBAUTH-USER
+      GF_AUTH_PROXY_HEADER_PROPERTY: username
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      # Nor a user and password on its API: the only way in is the gateway.
+      GF_AUTH_BASIC_ENABLED: "false"
+      # Every admin of the site sees the dashboards and can search with Explore.
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: Viewer
+      GF_USERS_VIEWERS_CAN_EDIT: "true"
+      # No WebSockets: the gateway passes on plain HTTP only.
+      GF_LIVE_MAX_CONNECTIONS: "0"
+      # Grafana does not call grafana.com: no check for updates, no plugin preinstall and no usage
+      # report. When the network cannot resolve names (the Wi-Fi of the owner) those calls only fail
+      # and fill the error panels.
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      # Nor does the browser: the home page is the Health dashboard, not the one of Grafana with
+      # the news of grafana.com.
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/health.json
+    volumes:
+      - ./observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./observability/grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./observability/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    # No published port: only the gateway reaches it.
+    networks: [monitoring]
+    depends_on:
+      - loki
+      - prometheus
+    restart: unless-stopped
+    logging: *logging
+
 networks:
   edge:
+  monitoring:
 
 volumes:
   postgres-data:
+  loki-data:
+  prometheus-data:
+  alloy-data:
+  grafana-data:
   tailscale-state:

@@ -1,6 +1,8 @@
 from datetime import UTC, datetime, timedelta
 
-from ingestion_worker.scheduler import Job, RunHistory, is_due, run_due_jobs, run_loop
+from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+from ingestion_worker.scheduler import Job, RunHistory, build_scheduler, is_due, run_due_jobs
 
 NOW = datetime(2026, 11, 2, 15, 0, tzinfo=UTC)
 
@@ -84,7 +86,8 @@ def test_a_job_that_fails_is_logged_and_the_next_ones_still_run(caplog):
 
 
 class World:
-    """A clock that only moves when the loop sleeps, and the history that the jobs write."""
+    """A clock that only moves when it is told, and the history that the jobs write. `passes` does
+    what APScheduler does in the container: a pass of the due jobs every `tick`."""
 
     def __init__(self):
         self.clock = NOW
@@ -94,8 +97,10 @@ class World:
     def now(self):
         return self.clock
 
-    def sleep(self, seconds):
-        self.clock += timedelta(seconds=seconds)
+    def passes(self, jobs, tick, until):
+        while self.clock < until:
+            run_due_jobs(jobs, self.read(), self.now())
+            self.clock += tick
 
     def read(self):
         return dict(self.history)
@@ -119,29 +124,11 @@ class World:
         return [m for s, m in self.attempts if s == source]
 
 
-def test_with_once_the_scheduler_makes_a_single_pass_and_ends():
-    world = World()
-    jobs = [world.job("measurements", timedelta(hours=1))]
-
-    run_loop(jobs, world.read, world.now, world.sleep, tick=timedelta(minutes=5), once=True)
-
-    assert world.minutes("measurements") == [0]
-    assert world.clock == NOW  # it did not even sleep
-
-
 def test_an_hourly_job_runs_at_the_start_and_then_once_an_hour_not_in_every_pass():
     world = World()
     jobs = [world.job("measurements", timedelta(hours=1))]
-    stop_at = NOW + timedelta(minutes=150)
 
-    run_loop(
-        jobs,
-        world.read,
-        world.now,
-        world.sleep,
-        tick=timedelta(minutes=10),
-        should_stop=lambda: world.clock >= stop_at,
-    )
+    world.passes(jobs, tick=timedelta(minutes=10), until=NOW + timedelta(minutes=150))
 
     assert world.minutes("measurements") == [0, 60, 120]
 
@@ -156,22 +143,45 @@ def test_after_a_failure_the_job_is_tried_again_when_the_wait_ends_and_not_in_ev
             retry_after=timedelta(minutes=10),
         )
     ]
-    stop_at = NOW + timedelta(minutes=25)
 
-    run_loop(
-        jobs,
-        world.read,
-        world.now,
-        world.sleep,
-        tick=timedelta(minutes=5),
-        should_stop=lambda: world.clock >= stop_at,
+    world.passes(jobs, tick=timedelta(minutes=5), until=NOW + timedelta(minutes=30))
+
+    # Fails, fails, succeeds; then it waits an hour.
+    assert world.minutes("measurements") == [0, 10, 20]
+
+
+def test_apscheduler_makes_a_pass_every_tick_starting_now():
+    jobs = [job()]
+
+    scheduler = build_scheduler(jobs, read=dict, now=lambda: NOW, tick=timedelta(seconds=30))
+
+    assert isinstance(scheduler, BlockingScheduler)
+    (scheduled,) = scheduler.get_jobs()
+    assert isinstance(scheduled.trigger, IntervalTrigger)
+    assert scheduled.trigger.interval == timedelta(seconds=30)
+    # The first pass at once: a worker that starts does not wait half a minute to look.
+    assert scheduled.next_run_time <= datetime.now(UTC)
+    # A pass that takes longer than the tick (a big download) is not started twice, and the passes
+    # that were missed meanwhile are one, not a burst.
+    assert scheduled.max_instances == 1
+    assert scheduled.coalesce is True
+
+
+def test_the_pass_of_apscheduler_runs_the_jobs_that_are_due():
+    ran = []
+    recent = RunHistory(last_success=NOW, last_attempt=NOW)
+    jobs = [
+        Job("boundaries", timedelta(days=30), lambda: ran.append("boundaries")),
+        Job("measurements", timedelta(hours=1), lambda: ran.append("measurements")),
+    ]
+    scheduler = build_scheduler(
+        jobs, read=lambda: {"boundaries": recent}, now=lambda: NOW, tick=timedelta(seconds=30)
     )
 
-    assert world.minutes("measurements") == [
-        0,
-        10,
-        20,
-    ]  # fails, fails, succeeds; then waits an hour
+    (scheduled,) = scheduler.get_jobs()
+    scheduled.func()
+
+    assert ran == ["measurements"]
 
 
 def test_a_job_that_succeeded_and_is_due_again_is_not_held_back_by_the_wait_after_a_failure():

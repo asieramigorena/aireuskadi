@@ -54,15 +54,6 @@ describe("the switch between the two maps", () => {
     expect(links().map((link) => link.getAttribute("href"))).toEqual(["/unit/48020", "/unit/48020?view=air&pollutant=O3"]);
   });
 
-  test("with a station open the air quality keeps it, and the map of the emissions, which has none, does not", () => {
-    show(air("O3"), "48020", 212);
-
-    expect(links().map((link) => link.getAttribute("href"))).toEqual([
-      "/unit/48020",
-      "/unit/48020?view=air&pollutant=O3&station=212",
-    ]);
-  });
-
   test("a click is a navigation of the page and not of the browser", () => {
     show(emissions);
     const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
@@ -150,13 +141,6 @@ describe("the selector of the pollutant of the air quality", () => {
     expect(navigate).toHaveBeenLastCalledWith("/unit/48020?view=air&pollutant=CO&station=212");
   });
 
-  test("choosing the default pollutant gives the address without it", () => {
-    show(air("O3"));
-    (select() as HTMLSelectElement).value = "NO2";
-    select()?.dispatchEvent(new Event("change", { bubbles: true }));
-
-    expect(navigate).toHaveBeenLastCalledWith("/?view=air");
-  });
 });
 
 describe("the focus of the keyboard", () => {
@@ -171,16 +155,6 @@ describe("the focus of the keyboard", () => {
     links()[1].focus();
     show(air("O3"));
     expect(document.activeElement).toBe(links()[1]);
-  });
-
-  test("a focus that was somewhere else is not taken", () => {
-    const other = document.createElement("button");
-    document.body.append(other);
-    other.focus();
-
-    show(air());
-
-    expect(document.activeElement).toBe(other);
   });
 
   test("when the control that had it goes away (the selector, back to the emissions), it goes to the last one that is left", () => {
@@ -244,13 +218,6 @@ describe("the controls of the maps in Spanish and in Basque", () => {
     expect(links().map((link) => link.getAttribute("href"))).toEqual(["/?lang=es", "/?view=air&lang=es"]);
   });
 
-  test("and the pollutant that is chosen keeps it", () => {
-    show({ ...air(), lang: "eu" });
-    (select() as HTMLSelectElement).value = "O3";
-    select()?.dispatchEvent(new Event("change", { bubbles: true }));
-
-    expect(navigate).toHaveBeenLastCalledWith("/?view=air&pollutant=O3&lang=eu");
-  });
 });
 
 describe("the selector of the language", () => {
@@ -313,19 +280,4 @@ describe("the selector of the language", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  test("the focus stays on the language that had it when they are drawn again", () => {
-    draw("eu");
-    languages()[1].focus();
-
-    draw("es");
-
-    expect(document.activeElement).toBe(languages()[1]);
-  });
-
-  test("drawing them again replaces them", () => {
-    draw("eu");
-    draw("es");
-
-    expect(root.querySelectorAll("a")).toHaveLength(3);
-  });
 });

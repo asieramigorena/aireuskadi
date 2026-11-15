@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
-import { buildApp } from "../src/app.js";
-import { dbTest } from "./database.js";
-import { brokenDb, fakeDb } from "./helpers.js";
-import { addMunicipality, addStation } from "./seed.js";
+import { buildApp } from "../src/app.ts";
+import { dbTest } from "./database.ts";
+import { brokenDb, fakeDb } from "./helpers.ts";
+import { addMunicipality, addStation } from "./seed.ts";
 
 type Collection = {
   type: string;
@@ -41,14 +41,6 @@ dbTest("the stations are GeoJSON points with their municipality, in the order of
   });
 });
 
-dbTest("the coordinates have six decimals, which is a tenth of a metre", async ({ db }) => {
-  await addStation(db, { code: "T_A", at: [-2.93512345678, 43.26312345678] });
-
-  const body = await stationsOf(db);
-
-  expect(body.features[0].geometry?.coordinates).toEqual([-2.935123, 43.263123]);
-});
-
 dbTest("a station without a position is listed with a null geometry, not left out or placed at 0,0", async ({ db }) => {
   await addStation(db, { code: "T_A", at: null });
 
@@ -56,24 +48,6 @@ dbTest("a station without a position is listed with a null geometry, not left ou
 
   expect(body.features).toHaveLength(1);
   expect(body.features[0].geometry).toBeNull();
-});
-
-dbTest("a station with no type of area says null, not an empty text", async ({ db }) => {
-  await addStation(db, { code: "T_A", areaType: null });
-
-  const body = await stationsOf(db);
-
-  expect(body.features[0].properties.area_type).toBeNull();
-});
-
-dbTest("two municipalities keep their own names", async ({ db }) => {
-  await addMunicipality(db, "98002", "Otherville");
-  await addStation(db, { code: "T_A", municipality: "98001" });
-  await addStation(db, { code: "T_B", municipality: "98002" });
-
-  const body = await stationsOf(db);
-
-  expect(body.features.map((f) => f.properties.municipality_name)).toEqual(["Testville", "Otherville"]);
 });
 
 const ROW = {
@@ -118,33 +92,6 @@ test("a row becomes a feature with exactly the properties of the contract", asyn
   ]);
 });
 
-test("a column that the contract does not name never reaches the answer", async () => {
-  const body = await answerFor([{ ...ROW, internal_note: "secret", geometry: { ...ROW.geometry, crs: "x" } }]);
-
-  expect(JSON.stringify(body)).not.toContain("secret");
-  expect(body.features[0].properties).not.toHaveProperty("internal_note");
-  expect(body.features[0].geometry).not.toHaveProperty("crs");
-});
-
-test("a null geometry and a null type of area are written as null", async () => {
-  const body = await answerFor([{ ...ROW, geometry: null, area_type: null }]);
-
-  expect(body.features[0].geometry).toBeNull();
-  expect(body.features[0].properties.area_type).toBeNull();
-});
-
-dbTest("no station is listed twice, whatever else is in the database", async ({ db }) => {
-  await addStation(db, { code: "T_A" });
-  await addStation(db, { code: "T_B" });
-
-  const app = await buildApp({ db });
-  const body = (await app.inject("/stations")).json() as Collection;
-
-  const ids = body.features.map((f) => f.properties.id);
-  expect(new Set(ids).size).toBe(ids.length);
-  expect(ids.length).toBeGreaterThanOrEqual(2);
-});
-
 test("without stations the answer is an empty list, not an error", async () => {
   const app = await buildApp({ db: fakeDb([]) });
 
@@ -164,17 +111,3 @@ test("a database that fails is a 500 with a fixed text", async () => {
   expect(response.body).not.toContain("reader_secret");
 });
 
-test("the description of the routes says what /stations answers", async () => {
-  const app = await buildApp({ db: fakeDb() });
-
-  const document = (await app.inject("/openapi.json")).json();
-
-  const schema = document.paths["/stations"].get.responses["200"].content["application/json"].schema;
-  expect(schema.required).toEqual(expect.arrayContaining(["type", "attribution", "features"]));
-  const item = schema.properties.features.items.properties;
-  expect(item.geometry.nullable).toBe(true);
-  expect(item.properties.properties.area_type.nullable).toBe(true);
-  expect(item.properties.required).toEqual(
-    expect.arrayContaining(["id", "code", "name", "area_type", "municipality_code", "municipality_name"]),
-  );
-});

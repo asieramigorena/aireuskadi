@@ -2,10 +2,10 @@
 // compares with the WHO guideline that has the same averaging period. The query and the way a
 // value is read (`LATEST`, `reading`) are also what the stations of a unit use (unit-stations.ts).
 import type { FastifyInstance } from "fastify";
-import type { Db } from "./db.js";
-import { INVALID_REQUEST } from "./problems.js";
-import { ATTRIBUTION, pointGeometry } from "./stations.js";
-import { KNOWN_UNIT, MIN_HOURS_FOR_A_MEAN, TO_UGM3 } from "./units.js";
+import type { Db } from "./db.ts";
+import { INVALID_REQUEST } from "./problems.ts";
+import { ATTRIBUTION, pointGeometry } from "./stations.ts";
+import { KNOWN_UNIT, MIN_HOURS_FOR_A_MEAN, TO_UGM3 } from "./units.ts";
 
 // The WHO 2021 guidelines have no value for one hour. An hourly value is not compared with a
 // guideline of another period (a bad hour is not an exceeded day), so each pollutant is compared

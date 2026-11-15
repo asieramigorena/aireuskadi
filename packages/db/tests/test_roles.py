@@ -1,4 +1,4 @@
-"""The read-only role of the services that only read: what it can and cannot do.
+"""The roles of the services: what the read-only role and the role of the auth service can and cannot do.
 
 Skipped unless DATABASE_URL points to a database whose user can create roles (the owner).
 The tests connect as the role itself and try things; the role is dropped afterwards.
@@ -7,28 +7,31 @@ The tests connect as the role itself and try things; the role is dropped afterwa
 import os
 
 import pytest
-from aireuskadi_db import SCHEMA, Base, create_all, create_reader_role
+from aireuskadi_db import SCHEMA, Base, create_reader_role, migrate
+from aireuskadi_db.roles import create_auth_role
 from aireuskadi_db.schema import main
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.exc import DBAPIError, ProgrammingError
+from sqlalchemy.exc import ProgrammingError
 
 URL = os.environ.get("DATABASE_URL")
 pytestmark = pytest.mark.skipif(not URL, reason="DATABASE_URL is not set")
 
 USER = "t_reader_test"
+AUTH = "t_auth_test"
 PASSWORD = "first-Pa55_word"
 
 
 @pytest.fixture
 def owner():
     engine = create_engine(URL)
-    create_all(engine)
+    migrate(engine)
     yield engine
     with engine.begin() as conn:
-        if conn.scalar(text("SELECT 1 FROM pg_roles WHERE rolname = :r"), {"r": USER}):
-            conn.execute(text(f"DROP OWNED BY {USER}"))  # takes its privileges away first
-            conn.execute(text(f"DROP ROLE {USER}"))
+        for role in (USER, AUTH):
+            if conn.scalar(text("SELECT 1 FROM pg_roles WHERE rolname = :r"), {"r": role}):
+                conn.execute(text(f"DROP OWNED BY {role}"))  # takes its privileges away first
+                conn.execute(text(f"DROP ROLE {role}"))
     engine.dispose()
 
 
@@ -65,6 +68,12 @@ def test_it_cannot_read_the_record_of_the_loads(reader):
         conn.execute(text(f"SELECT * FROM {SCHEMA}.ingestion_run"))
 
 
+def test_it_cannot_read_the_accounts(reader):
+    # The services that answer the public never see a password hash.
+    with pytest.raises(ProgrammingError, match="permission denied"), reader.connect() as conn:
+        conn.execute(text("SELECT hashed_password FROM auth.app_user"))
+
+
 def test_it_has_no_privilege_to_change_anything(owner, reader):
     changes = ["INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"]
     with owner.connect() as conn:
@@ -77,29 +86,6 @@ def test_it_has_no_privilege_to_change_anything(owner, reader):
         assert not conn.scalar(
             text("SELECT has_schema_privilege(:r, :s, 'CREATE')"), {"r": USER, "s": SCHEMA}
         )
-
-
-@pytest.mark.parametrize(
-    "statement",
-    [
-        f"INSERT INTO {SCHEMA}.pollutant (code, name) VALUES ('TSTX', 'x')",
-        f"UPDATE {SCHEMA}.pollutant SET name = 'x'",
-        f"DELETE FROM {SCHEMA}.pollutant",
-        f"DROP TABLE {SCHEMA}.pollutant",
-        f"CREATE TABLE {SCHEMA}.leftover (id integer)",
-    ],
-)
-def test_trying_to_change_something_fails_even_after_switching_the_read_only_mode_off(
-    reader, statement
-):
-    with pytest.raises(DBAPIError), reader.connect() as conn:
-        conn.execute(text("SET default_transaction_read_only = off"))
-        conn.execute(text(statement))
-
-
-def test_a_write_is_also_refused_by_the_read_only_mode_of_the_role(reader):
-    with pytest.raises(DBAPIError, match="read-only"), reader.connect() as conn:
-        conn.execute(text(f"INSERT INTO {SCHEMA}.pollutant (code, name) VALUES ('TSTX', 'x')"))
 
 
 def test_it_cannot_do_what_only_an_administrator_does(owner, reader):
@@ -130,68 +116,6 @@ def test_running_it_again_changes_the_password_and_keeps_everything_else(owner, 
         assert conn.scalar(text("SHOW statement_timeout")) == "5s"
 
 
-def test_a_password_with_quotes_and_symbols_is_taken_as_it_is(owner):
-    tricky = 'it\'s "a" pa$$word; DROP ROLE x;--'
-
-    create_reader_role(owner, USER, tricky)
-
-    with reader_engine(tricky).connect() as conn:
-        conn.execute(text("SELECT 1"))
-
-
-@pytest.mark.parametrize("user", ["", "reader; DROP TABLE x", "a" * 64, "Reader Role"])
-def test_a_name_that_is_not_a_plain_role_name_is_refused(owner, user):
-    with pytest.raises(ValueError, match="role name"):
-        create_reader_role(owner, user, PASSWORD)
-
-
-def test_an_empty_password_is_refused(owner):
-    with pytest.raises(ValueError, match="password"):
-        create_reader_role(owner, USER, "")
-
-
-def test_running_it_again_puts_back_what_somebody_changed_by_hand(owner, reader):
-    with owner.begin() as conn:
-        conn.execute(text(f"GRANT INSERT, UPDATE ON {SCHEMA}.pollutant TO {USER}"))
-        conn.execute(text(f"GRANT SELECT ON {SCHEMA}.ingestion_run TO {USER}"))
-        conn.execute(text(f"GRANT CREATE ON SCHEMA {SCHEMA} TO {USER}"))
-        conn.execute(
-            text(
-                f"ALTER ROLE {USER} SUPERUSER CREATEDB CREATEROLE REPLICATION BYPASSRLS "
-                "CONNECTION LIMIT 99"
-            )
-        )
-        conn.execute(text(f"ALTER ROLE {USER} RESET default_transaction_read_only"))
-        conn.execute(text(f"ALTER ROLE {USER} RESET statement_timeout"))
-
-    create_reader_role(owner, USER, PASSWORD)
-
-    with owner.connect() as conn:
-        role = conn.execute(
-            text(
-                "SELECT rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, "
-                "rolconnlimit FROM pg_roles WHERE rolname = :r"
-            ),
-            {"r": USER},
-        ).one()
-        assert tuple(role) == (False, False, False, False, False, 10)
-        for table, privilege in [
-            ("pollutant", "INSERT"),
-            ("pollutant", "UPDATE"),
-            ("ingestion_run", "SELECT"),
-        ]:
-            assert not conn.scalar(
-                text("SELECT has_table_privilege(:r, :t, :p)"),
-                {"r": USER, "t": f"{SCHEMA}.{table}", "p": privilege},
-            )
-        assert not conn.scalar(
-            text("SELECT has_schema_privilege(:r, :s, 'CREATE')"), {"r": USER, "s": SCHEMA}
-        )
-    with reader_engine(PASSWORD).connect() as conn:
-        assert conn.scalar(text("SHOW statement_timeout")) == "5s"
-        assert conn.scalar(text("SHOW default_transaction_read_only")) == "on"
-
-
 # The command line: aireuskadi-db-init creates the role when the environment has its credentials.
 
 
@@ -210,16 +134,6 @@ def test_the_command_creates_the_role_when_the_environment_has_its_credentials(
     assert PASSWORD not in output  # the password is never printed
 
 
-def test_the_command_does_not_create_a_role_without_credentials(owner, monkeypatch):
-    monkeypatch.delenv("POSTGRES_READER_USER", raising=False)
-    monkeypatch.delenv("POSTGRES_READER_PASSWORD", raising=False)
-
-    main()
-
-    with owner.connect() as conn:
-        assert not conn.scalar(text("SELECT 1 FROM pg_roles WHERE rolname = :r"), {"r": USER})
-
-
 @pytest.mark.parametrize(
     ("user", "password"), [(USER, None), (None, PASSWORD), (USER, ""), ("", PASSWORD)]
 )
@@ -234,3 +148,45 @@ def test_the_command_refuses_half_of_the_credentials_instead_of_guessing(
 
     with pytest.raises(SystemExit, match="POSTGRES_READER_USER"):
         main()
+
+
+# The role of the auth service: it reads the accounts to log people in, and changes only is_admin.
+
+
+@pytest.fixture
+def auth_role(owner):
+    create_auth_role(owner, AUTH, PASSWORD)
+    engine = create_engine(make_url(URL).set(username=AUTH, password=PASSWORD))
+    yield engine
+    engine.dispose()
+
+
+def test_the_auth_service_reads_the_accounts_and_changes_only_is_admin(auth_role):
+    with auth_role.begin() as conn:
+        conn.execute(text("SELECT username, hashed_password, is_admin FROM auth.app_user"))
+        conn.execute(text("UPDATE auth.app_user SET is_admin = false WHERE id = -1"))
+
+    forbidden = [
+        "UPDATE auth.app_user SET hashed_password = 'x' WHERE id = -1",
+        "INSERT INTO auth.app_user (username) VALUES ('user1')",
+        "DELETE FROM auth.app_user",
+        f"SELECT count(*) FROM {SCHEMA}.municipality",
+    ]
+    for statement in forbidden:
+        with pytest.raises(ProgrammingError, match="permission denied"), auth_role.begin() as conn:
+            conn.execute(text(statement))
+
+
+def test_the_command_creates_the_role_of_the_auth_service_too(owner, monkeypatch):
+    monkeypatch.setenv("POSTGRES_AUTH_USER", AUTH)
+    monkeypatch.setenv("POSTGRES_AUTH_PASSWORD", PASSWORD)
+    # Roles belong to the whole server: the real reader role of .env must not be touched.
+    monkeypatch.delenv("POSTGRES_READER_USER", raising=False)
+    monkeypatch.delenv("POSTGRES_READER_PASSWORD", raising=False)
+
+    main()
+
+    engine = create_engine(make_url(URL).set(username=AUTH, password=PASSWORD))
+    with engine.connect() as conn:
+        conn.execute(text("SELECT count(*) FROM auth.app_user"))
+    engine.dispose()

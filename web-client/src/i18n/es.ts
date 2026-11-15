@@ -11,6 +11,7 @@ export const es: Texts = {
 
   mapChoiceLabel: "Elige el mapa",
   languageChoiceLabel: "Idioma",
+  adminLink: "Acceso admin",
   panelLabel: "Detalles de la unidad",
   emissionsCredit: "Emisiones: registro E-PRTR, Open Data Euskadi, CC BY 4.0.",
   airCredit: (attribution) => `Calidad del aire: ${attribution}`,

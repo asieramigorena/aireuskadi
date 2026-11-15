@@ -11,7 +11,8 @@ function mount() {
     <nav id="languages" aria-label=""></nav>
     <aside id="panel" aria-label="" hidden></aside>
     <p id="emissions-credit"></p>
-    <p id="air-credit"></p>`;
+    <p id="air-credit"></p>
+    <a id="admin-link" href="/admin"></a>`;
 }
 
 const label = (id: string) => document.getElementById(id)?.getAttribute("aria-label");
@@ -108,5 +109,22 @@ describe("a page that is missing one of the parts", () => {
 
     expect(() => applyPageTexts("emissions", null)).not.toThrow();
     expect(label("controls")).toBe("Elige el mapa");
+  });
+});
+
+describe("the way in for the admins", () => {
+  test("is named in the language of the page", () => {
+    applyPageTexts("emissions", null);
+    expect(text("admin-link")).toBe("Admin login");
+
+    setLanguage("es");
+    applyPageTexts("emissions", null);
+    expect(text("admin-link")).toBe("Acceso admin");
+  });
+
+  test("takes the language of the map to the login page", () => {
+    setLanguage("eu");
+    applyPageTexts("emissions", null);
+    expect(document.getElementById("admin-link")?.getAttribute("href")).toBe("/admin?lang=eu");
   });
 });

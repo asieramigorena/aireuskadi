@@ -1,12 +1,15 @@
-# Local development stack: PostgreSQL + PostGIS and Redis.
+# Local development stack: PostgreSQL + PostGIS, Redis (the cache of the gateway) and the services.
 # Copy .env.example to .env before running `docker compose up -d`.
 # The application services are added here as they get their Dockerfile.
 # Loki, Alloy, Prometheus and Grafana start with the rest: the logs and the state of every service
-# are in Grafana (http://127.0.0.1:3000, dashboards "Health", "Ingestion", "Services" and "API").
+# are in Grafana, at http://127.0.0.1:8080/admin with an admin account (dashboards "Health",
+# "Ingestion", "Services" and "API"). Accounts: `uv run --env-file .env aireuskadi-admin add <name>`
+# and `... promote <name>`.
 # The ingestion worker runs on demand, not with `up`:
 #   docker compose run --rm ingestion-worker boundaries
 #   docker compose run --rm ingestion-worker eprtr --year 2023
 # The image of the ingestion worker and the settings that its services share.
+# Docker orchestrated by Claude
 x-ingestion-worker: &ingestion-worker
   build:
     context: .
@@ -37,10 +40,14 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # The cache of the gateway (services/api-gateway/src/api_gateway/cache.py). Nothing in it must
+  # survive: no disk, and a ceiling of memory past which the oldest answers are dropped, so that
+  # questions with made-up values cannot fill the machine.
   redis:
     image: redis:7-alpine
-    ports:
-      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    # Only the gateway reaches it, and it publishes no port: what is in it is served to the browser.
+    networks: [cache]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -64,6 +71,31 @@ services:
         condition: service_healthy
     # /health asks the database. The image has no curl, so Python makes the request; a 503 raises
     # in urlopen and the command fails.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # The accounts: login with JWT, the admin pages, and /me, which the gateway asks before it opens
+  # Grafana. It is the only service that reads the accounts (with a role of its own) and the only
+  # one that knows JWT_SECRET. It publishes no port: the gateway passes /admin/... on to it.
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth-service/auth.Dockerfile
+    environment:
+      AUTH_DATABASE_URL: postgresql+psycopg://${POSTGRES_AUTH_USER}:${POSTGRES_AUTH_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -112,15 +144,25 @@ services:
     environment:
       EMISSIONS_URL: http://emissions-service:8000
       AIR_QUALITY_URL: http://air-quality-service:8000
+      AUTH_URL: http://auth-service:8000
+      GRAFANA_URL: http://grafana:3000
+      # Without it the gateway asks the services every time, as before.
+      REDIS_URL: redis://redis:6379/0
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-8080}:8000"
-    # It also joins `edge`, the only network the tunnel is on.
-    networks: [default, edge]
+    # It also joins `edge`, the only network the tunnel is on, `cache`, the only one Redis is on,
+    # and `monitoring`, the only one Grafana is on.
+    networks: [default, edge, cache, monitoring]
     depends_on:
       emissions-service:
         condition: service_healthy
       air-quality-service:
         condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      # Started, not healthy: without Redis the gateway still answers.
+      redis:
+        condition: service_started
     # The check of the gateway itself: it does not ask any service. The image has no curl.
     healthcheck:
       test:
@@ -187,8 +229,9 @@ services:
     restart: unless-stopped
 
   # Centralised logs and metrics. Alloy reads the logs of every container and sends them to Loki,
-  # and the metrics (state, CPU, memory...) to Prometheus; Grafana shows both. Grafana is
-  # published on localhost only.
+  # and the metrics (state, CPU, memory...) to Prometheus; Grafana shows both. They are on the
+  # network `monitoring` only, which the gateway shares with them and nothing else does: Grafana
+  # trusts the user that the gateway names (auth proxy), so nothing else may reach it.
   # The Grafana stack (this block and observability/) was set up assisted by Claude.
   loki:
     image: grafana/loki:3.5.7
@@ -196,6 +239,7 @@ services:
     volumes:
       - ./observability/loki.yml:/etc/loki/config.yml:ro
       - loki-data:/loki
+    networks: [monitoring]
     restart: unless-stopped
 
   prometheus:
@@ -208,6 +252,7 @@ services:
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
+    networks: [monitoring]
     restart: unless-stopped
 
   alloy:
@@ -227,6 +272,7 @@ services:
       # CPU, the memory and the network of each container.
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
+    networks: [monitoring]
     depends_on:
       - loki
       - prometheus
@@ -235,8 +281,29 @@ services:
   grafana:
     image: grafana/grafana:12.0.0
     environment:
+      # The full admin of Grafana is the account of the site with this name.
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      # Never used to log in (the form and basic auth are off), but Grafana needs one for the admin
+      # it creates.
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-me}
       GF_USERS_ALLOW_SIGN_UP: "false"
+      # It lives at /grafana/ of the site, behind the gateway.
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      # Auth proxy: no login of its own; it trusts the name that the gateway puts in X-WEBAUTH-USER
+      # and makes the user the first time.
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: X-WEBAUTH-USER
+      GF_AUTH_PROXY_HEADER_PROPERTY: username
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      # Nor a user and password on its API: the only way in is the gateway.
+      GF_AUTH_BASIC_ENABLED: "false"
+      # Every admin of the site sees the dashboards and can search with Explore.
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: Viewer
+      GF_USERS_VIEWERS_CAN_EDIT: "true"
+      # No WebSockets: the gateway passes on plain HTTP only.
+      GF_LIVE_MAX_CONNECTIONS: "0"
       # Grafana does not call grafana.com: no check for updates, no plugin preinstall and no usage
       # report. When the network cannot resolve names (the Wi-Fi of the owner) those calls only fail
       # and fill the error panels.
@@ -244,13 +311,16 @@ services:
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      # Nor does the browser: the home page is the Health dashboard, not the one of Grafana with
+      # the news of grafana.com.
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/health.json
     volumes:
       - ./observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - ./observability/grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
       - ./observability/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
-    ports:
-      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    # No published port: only the gateway reaches it.
+    networks: [monitoring]
     depends_on:
       - loki
       - prometheus
@@ -258,6 +328,8 @@ services:
 
 networks:
   edge:
+  cache:
+  monitoring:
 
 volumes:
   postgres-data:

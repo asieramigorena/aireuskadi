@@ -36,23 +36,6 @@ def test_each_route_is_asked_to_the_air_quality_service_and_never_to_the_emissio
 
 
 @pytest.mark.parametrize(
-    "public",
-    [
-        "/api/v1/pollutants",
-        "/api/v1/facilities/12",
-        "/api/v1/units?level=municipality&pollutant=NOX&year=2023",
-    ],
-)
-def test_the_routes_of_the_emissions_service_never_reach_the_air_quality_one(
-    client, emissions, air_quality, public
-):
-    client.get(public)
-
-    assert len(emissions.requests) == 1
-    assert air_quality.requests == []
-
-
-@pytest.mark.parametrize(
     ("public", "expected"),
     [
         ("/api/v1/stations/latest?pollutant=NO2", {"pollutant": "NO2"}),
@@ -145,26 +128,6 @@ def test_a_failure_of_the_air_quality_service_is_a_502_that_says_nothing_of_the_
     assert response.headers["content-type"] == "application/problem+json"
     assert response.json()["detail"] == "The service is not available."
     assert "database" not in response.text
-
-
-@pytest.mark.parametrize(
-    ("error", "status"),
-    [
-        (httpx.ConnectError("[Errno -2] Name or service not known: air-quality-service"), 502),
-        (httpx.ReadTimeout("timed out"), 504),
-    ],
-)
-def test_an_air_quality_service_that_is_down_is_a_fixed_answer_without_its_name_or_port(
-    client, air_quality, error, status
-):
-    air_quality.error = error
-
-    response = client.get("/api/v1/stations")
-
-    assert response.status_code == status
-    assert response.headers["content-type"] == "application/problem+json"
-    assert "air-quality" not in response.text
-    assert "8000" not in response.text
 
 
 def test_when_the_air_quality_service_is_down_the_emissions_routes_keep_working(

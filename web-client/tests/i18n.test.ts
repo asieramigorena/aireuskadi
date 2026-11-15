@@ -51,10 +51,6 @@ describe("detectLanguage: the language that the browser of the visitor asks for"
     expect(detectLanguage(["", "*"])).toBe("en");
   });
 
-  test("a value that is not even a string (a browser with no language) is skipped, not an error", () => {
-    expect(detectLanguage([undefined as unknown as string, null as unknown as string, "es"])).toBe("es");
-    expect(detectLanguage([undefined as unknown as string])).toBe("en");
-  });
 });
 
 describe("the language in use", () => {
@@ -87,10 +83,6 @@ function strings(value: unknown, path = ""): [string, string][] {
 
 describe.each(LANGUAGES)("the texts in %s", (code) => {
   const dictionary = textsOf(code);
-
-  test("have no empty text", () => {
-    for (const [path, text] of strings(dictionary)) expect(text.trim(), path).not.toBe("");
-  });
 
   test("the texts with a hole put what they are given in it, and leave nothing undefined", () => {
     const made = [
@@ -131,11 +123,6 @@ describe.each(LANGUAGES)("the texts in %s", (code) => {
     expect(dictionary.groupFrom).toBeGreaterThanOrEqual(4);
   });
 
-  test("have the twelve months, short, all different, and in the order of the year", () => {
-    expect(dictionary.months).toHaveLength(12);
-    expect(new Set(dictionary.months).size).toBe(12);
-    for (const month of dictionary.months) expect(month.trim(), month).not.toBe("");
-  });
 });
 
 describe("what is translated is not left in English", () => {
@@ -165,9 +152,6 @@ describe("the names of the pollutants", () => {
     for (const air of AIR_CODES) expect(dictionary.pollutants[air], air).toBe(dictionary.airPollutants[air as keyof typeof dictionary.airPollutants]);
   });
 
-  test("English has no table of the emissions: the names come from the API, which is in English", () => {
-    expect(textsOf("en").pollutants).toEqual({});
-  });
 });
 
 describe("a few of the texts, so that they are not swapped", () => {

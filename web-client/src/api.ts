@@ -1,7 +1,7 @@
 // The calls to the gateway. It is the only place that knows the routes, and the only way out of the
 // page: a relative URL, so that every call goes to the site that served the page and never to
 // another one.
-import type { Level, Point, StationCollection, UnitCard, UnitCollection } from "./types";
+import type { BoundaryCollection, Level, Point, StationCollection, UnitCard, UnitIndicators } from "./types";
 import { errorText } from "./format";
 import { texts } from "./i18n";
 import type { Selection } from "./router";
@@ -49,8 +49,11 @@ export function createApi(fetchFn: typeof fetch = (...args) => fetch(...args)) {
   return {
     points: (selection: Selection, signal?: AbortSignal) =>
       get<Point[]>("/facilities/points", { pollutant: selection.pollutant, year: year(selection) }, signal),
+    /** The numbers of every unit of the level for the pollutant and the year: no boundaries. */
     units: (level: Level, selection: Selection, signal?: AbortSignal) =>
-      get<UnitCollection>("/units", { level, pollutant: selection.pollutant, year: year(selection) }, signal),
+      get<UnitIndicators[]>("/units", { level, pollutant: selection.pollutant, year: year(selection) }, signal),
+    /** The boundaries of the units of a level: they weigh, and they do not change with the pollutant. */
+    boundaries: (level: Level, signal?: AbortSignal) => get<BoundaryCollection>("/units/boundaries", { level }, signal),
     /** The latest value of each station for a pollutant: the map of the air quality. */
     stations: (pollutant: string, signal?: AbortSignal) =>
       get<StationCollection>("/stations/latest", { pollutant }, signal),

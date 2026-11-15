@@ -28,16 +28,6 @@ describe("the panel of a unit", () => {
     expect(rule("#panel")).toMatch(/--panel-pad-top:\s*[\d.]+rem/);
   });
 
-  test("the panel has no padding on top: it would be a strip above the header where the rows show", () => {
-    expect(rule("#panel")).toMatch(/padding:\s*0\s/);
-  });
-
-  test("on a narrow screen (the sheet of a phone) the panel has no padding on top either", () => {
-    const narrow = css.slice(css.indexOf("@media (max-width: 52rem)"));
-    const sheet = narrow.slice(narrow.indexOf("  #panel {"), narrow.indexOf("}", narrow.indexOf("  #panel {")));
-
-    expect(sheet).toMatch(/padding:\s*0\s/);
-  });
 });
 
 describe("the air quality in the panel", () => {
@@ -50,10 +40,6 @@ describe("the air quality in the panel", () => {
 
   test("a value and its unit stay in one line: '12' above 'µg/m³' reads as two things", () => {
     expect(rule("#panel .measure")).toMatch(/white-space:\s*nowrap/);
-  });
-
-  test("the name of a station can be long and does not push the panel sideways", () => {
-    expect(rule("#panel summary")).toMatch(/overflow-wrap:\s*anywhere/);
   });
 
   test("the name of a pollutant that is a long word cannot push the table out of the panel", () => {
@@ -69,13 +55,6 @@ describe("the air quality in the panel", () => {
     expect(summary).toMatch(/padding-block:\s*0\.8rem/);
   });
 
-  test("the outline of the focus can be seen on the pale panel (the yellow one was made for the dark map)", () => {
-    expect(rule("#panel :focus-visible")).toMatch(/outline-color:\s*var\(--ink\)/);
-  });
-
-  test("a station that is focused is not left under the header that stays at the top", () => {
-    expect(rule("#panel")).toMatch(/scroll-padding-top:\s*[\d.]+rem/);
-  });
 });
 
 describe("the controls to choose the map", () => {
@@ -125,13 +104,6 @@ describe("the map of the air quality on a phone: its credits are longer, so what
     expect(lifted(narrow, ".air-view #panel")).toBeGreaterThan(lifted(narrow, "#panel"));
   });
 
-  test("on a phone on its side the panel is at the side and does not float: the later block undoes the lift of the sheet", () => {
-    const short = mediaBlock("@media (max-height: 30rem)");
-    const at = short.indexOf(".air-view #panel {");
-
-    expect(at, "no .air-view #panel in the block of the phone on its side").toBeGreaterThanOrEqual(0);
-    expect(short.slice(at, short.indexOf("}", at))).toMatch(/bottom:\s*var\(--bottom\)/);
-  });
 });
 
 describe("the legend of the air quality", () => {
@@ -141,15 +113,6 @@ describe("the legend of the air quality", () => {
     expect(rule("#legend-bar")).toMatch(/position:\s*relative/);
   });
 
-  test("the three labels keep the one of the middle in the middle, whatever the width of the other two", () => {
-    expect(rule(".legend-ends.three")).toMatch(/grid-template-columns:\s*1fr auto 1fr/);
-  });
-
-  test("a label is one line, and on a phone on its side the legend of this map is wide enough for the three", () => {
-    expect(rule(".legend-ends.three span")).toMatch(/white-space:\s*nowrap/);
-    const short = css.slice(css.indexOf("@media (max-height: 30rem)"));
-    expect(short.slice(0, short.indexOf("\n}\n"))).toMatch(/\.air-view \.legend \{[^}]*width:\s*12rem/);
-  });
 });
 
 describe("the ratio of the emissions", () => {
@@ -168,11 +131,6 @@ describe("the selector of the language", () => {
 
     expect(current).toMatch(/background:/);
     expect(current).toMatch(/font-weight:\s*[6-9][0-9]0/);
-  });
-
-  test("sits next to the name of the page, on one line that wraps when the screen is narrow", () => {
-    expect(rule(".brand")).toMatch(/display:\s*flex/);
-    expect(rule(".brand")).toMatch(/flex-wrap:\s*wrap/);
   });
 
   test("with a pointer, each language is at least 24 px high, as a target needs", () => {

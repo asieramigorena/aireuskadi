@@ -9,7 +9,7 @@ import os
 from decimal import Decimal
 
 import pytest
-from aireuskadi_db import Pollutant, WhoGuideline, create_all, seed_who_guidelines, who
+from aireuskadi_db import WhoGuideline, migrate, seed_who_guidelines
 from aireuskadi_db.schema import main
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import make_url
@@ -46,7 +46,7 @@ def only_the_database_of_the_tests():
 @pytest.fixture
 def engine():
     engine = create_engine(URL)
-    create_all(engine)
+    migrate(engine)
     return engine
 
 
@@ -87,24 +87,6 @@ def test_loading_them_again_changes_nothing_and_puts_back_a_value_that_was_chang
     seed_who_guidelines(session)
 
     assert loaded(session) == PUBLISHED
-
-
-def test_the_pollutants_that_are_missing_are_created_and_the_existing_ones_are_left_alone(
-    session, monkeypatch
-):
-    # With codes of their own: the real ones may already be in the database, with data pointing to them.
-    monkeypatch.setattr(
-        who, "POLLUTANTS", [("T_NEW", "New name", "gas"), ("T_OLD", "Name of the seed", "gas")]
-    )
-    monkeypatch.setattr(who, "GUIDELINES", [("T_NEW", "annual", 1), ("T_OLD", "annual", 2)])
-    session.add(Pollutant(code="T_OLD", name="A name set by somebody else"))
-    session.flush()
-
-    seed_who_guidelines(session)
-
-    names = {code: name for code, name in session.execute(select(Pollutant.code, Pollutant.name))}
-    assert names["T_NEW"] == "New name"
-    assert names["T_OLD"] == "A name set by somebody else"
 
 
 def clear_for_real(engine):

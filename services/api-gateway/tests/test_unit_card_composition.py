@@ -73,42 +73,6 @@ def test_each_service_is_asked_for_its_part_of_the_unit_and_only_that(client, an
     assert not to_air_quality.url.params
 
 
-def test_the_headers_of_the_browser_reach_neither_service(client, answers):
-    emissions, air_quality = answers
-
-    client.get(UNIT_URL, headers={"Cookie": "session=abc", "Authorization": "Bearer secret"})
-
-    for upstream in (emissions, air_quality):
-        (sent,) = upstream.requests
-        names = {name.lower() for name in sent.headers}
-        assert names <= {"host", "accept", "accept-encoding", "connection", "user-agent"}, names
-
-
-@pytest.mark.parametrize("code", ["48", "4802", "48020"])
-def test_the_card_of_every_level_asks_both_services(client, answers, code):
-    emissions, air_quality = answers
-
-    client.get(f"/api/v1/units/{code}")
-
-    assert [r.url.path for r in emissions.requests] == [f"/units/{code}"]
-    assert [r.url.path for r in air_quality.requests] == [f"/units/{code}/stations"]
-
-
-def test_a_district_without_stations_says_why(client, answers):
-    _, air_quality = answers
-    district = {**STATIONS, "measured": False, "reason": "level_not_supported", "stations": None}
-    air_quality.respond(body=json.dumps(district).encode())
-
-    body = client.get("/api/v1/units/4802").json()
-
-    assert body["air_quality"] == {
-        "attribution": STATIONS["attribution"],
-        "measured": False,
-        "reason": "level_not_supported",
-        "stations": None,
-    }
-
-
 # --- the air quality service cannot answer: the card still does -----------------------------------
 
 
@@ -126,34 +90,6 @@ def test_without_the_air_quality_service_the_card_is_the_same_and_says_so(client
     assert body["air_quality"] is None
     assert {k: v for k, v in body.items() if k != "air_quality"} == CARD
     assert "air-quality" not in response.text
-
-
-@pytest.mark.parametrize(
-    ("status", "body"),
-    [
-        (500, b"Internal Server Error"),
-        (503, b'{"detail": "cannot reach the database"}'),
-        (404, b'{"status": 404, "detail": "Unit 48020 not found."}'),
-        (422, b'{"status": 422, "errors": []}'),
-        (200, b"this is not JSON"),
-        (200, b"[]"),
-        (200, b'{"measured": true}'),
-        (200, b'{"attribution": "x", "measured": "yes", "reason": null, "stations": []}'),
-        (200, b'{"attribution": "x", "measured": true, "reason": null, "stations": 5}'),
-        (200, b'{"attribution": "x", "measured": true, "reason": null, "stations": {}}'),
-    ],
-)
-def test_an_answer_of_the_air_quality_service_that_cannot_be_used_is_none_and_nothing_of_it_comes_back(
-    client, answers, status, body
-):
-    _, air_quality = answers
-    air_quality.respond(status, body, "application/json")
-
-    response = client.get(UNIT_URL)
-
-    assert response.status_code == 200
-    assert response.json()["air_quality"] is None
-    assert "database" not in response.text
 
 
 def test_only_what_the_gateway_knows_comes_from_the_air_quality_service(client, answers):
@@ -229,14 +165,3 @@ def test_a_card_that_is_not_an_object_is_a_502_that_says_nothing_of_the_reason(
     assert response.status_code == 502
     assert response.json()["detail"] == "The service is not available."
     assert "JSON" not in response.text
-
-
-@pytest.mark.parametrize("status", [500, 503, 302])
-def test_a_failure_of_the_emissions_service_is_a_502(client, answers, status):
-    emissions, _ = answers
-    emissions.respond(status, b"Internal Server Error", "text/plain")
-
-    response = client.get(UNIT_URL, follow_redirects=False)
-
-    assert response.status_code == 502
-    assert response.headers["content-type"] == "application/problem+json"

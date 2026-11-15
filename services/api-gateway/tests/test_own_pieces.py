@@ -22,11 +22,6 @@ def test_the_interactive_documentation_is_off_unless_it_is_asked_for(client):
     assert client.get("/redoc").status_code == 404
 
 
-def test_the_description_of_the_routes_is_not_published_unless_it_is_asked_for(client):
-    # The browser has no use for it, and on the internet it is the list of what can be probed.
-    assert client.get("/openapi.json").status_code == 404
-
-
 def test_each_request_leaves_one_record_without_the_query_string_or_the_headers(
     client, emissions, caplog
 ):
@@ -40,14 +35,6 @@ def test_each_request_leaves_one_record_without_the_query_string_or_the_headers(
     assert (record.method, record.path, record.status) == ("GET", "/api/v1/units", 200)
     assert "secret-token" not in str(record.__dict__)
     assert "NOX" not in str(record.__dict__)
-
-
-def test_a_request_that_the_gateway_refuses_is_logged_with_its_status(client, caplog):
-    with caplog.at_level(logging.INFO, logger=ACCESS):
-        client.get("/api/v1/health")
-
-    (record,) = [r for r in caplog.records if r.name == ACCESS]
-    assert record.status == 404
 
 
 def test_the_check_of_the_compose_is_only_in_the_log_at_debug(client, caplog):

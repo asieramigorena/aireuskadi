@@ -4,7 +4,7 @@
 // the first time. Without DATABASE_URL (the CI) they are skipped.
 import pg from "pg";
 import { test as base } from "vitest";
-import type { Db } from "../src/db.js";
+import type { Db } from "../src/db.ts";
 
 export function testDatabaseUrl(): string | undefined {
   const value = process.env.DATABASE_URL;

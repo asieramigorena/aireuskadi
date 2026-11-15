@@ -16,7 +16,7 @@ from aireuskadi_db import (
     Station,
     Territory,
     WhoGuideline,
-    create_all,
+    migrate,
 )
 from emissions_service.main import create_app
 from fastapi.testclient import TestClient
@@ -91,7 +91,7 @@ def engine():
     if not url:
         pytest.skip("DATABASE_URL is not set")
     engine = create_engine(url)
-    create_all(engine)
+    migrate(engine)
     yield engine
     # The API reads through its own connection, so what a test writes has to be committed
     # and removed here. Codes that start with TST (pollutants), T0000000 (NIMA) and 99 (units)
@@ -113,6 +113,14 @@ def engine():
 @pytest.fixture
 def client(engine):
     return TestClient(create_app(engine))
+
+
+@pytest.fixture
+def units_of_the_tests(engine):
+    """Only the units of the tests (see add_test_units), for a test that needs no data in them."""
+    with Session(engine) as session:
+        add_test_units(session)
+        session.commit()
 
 
 @pytest.fixture

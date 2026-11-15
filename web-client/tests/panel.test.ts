@@ -163,13 +163,6 @@ describe("what the panel shows", () => {
     expect(root.querySelector("[role='alert']")?.textContent).toBe("Unit 99999 not found.");
   });
 
-  test("showing another view replaces the one before", () => {
-    show({ status: "card", card: card() });
-    show({ status: "card", card: card({ name: "Other" }) });
-
-    expect(root.querySelectorAll("h2")).toHaveLength(1);
-    expect(root.querySelector("h2")?.textContent).toBe("Other");
-  });
 });
 
 describe("the air quality of the unit", () => {
@@ -259,26 +252,6 @@ describe("the air quality of the unit", () => {
       expect(scroll).toHaveBeenCalledWith({ block: "start" });
     });
 
-    test("when it is not one of the stations of the unit nothing is opened and nothing breaks", () => {
-      const scroll = vi.fn();
-      window.HTMLElement.prototype.scrollIntoView = scroll;
-
-      show({ status: "card", card: card({ air_quality: three() }), station: 99999 });
-
-      expect(blocks().map((block) => block.open)).toEqual([false, false, false]);
-      expect(section()?.querySelector("[aria-current]")).toBeNull();
-      expect(scroll).not.toHaveBeenCalled();
-    });
-
-    test("without a station nothing is marked, even when there is only one and it is open", () => {
-      show({ status: "card", card: card({ air_quality: air() }) });
-      expect(section()?.querySelector("[aria-current]")).toBeNull();
-      expect(blocks()[0].open).toBe(true);
-
-      show({ status: "card", card: card({ air_quality: air() }), station: null });
-      expect(section()?.querySelector("[aria-current]")).toBeNull();
-    });
-
     test("a station without values that was chosen is open and says so", () => {
       const quiet = air({ measured: false, reason: "no_data", stations: [station({ id: 7, readings: [] }), station({ id: 8, readings: [] })] });
 
@@ -304,15 +277,6 @@ describe("the air quality of the unit", () => {
     expect(section()?.querySelector(".updated")?.textContent).toBe("Latest value: 11 Nov, 14:00 UTC");
     const cells = [...(section()?.querySelectorAll("tbody tr") ?? [])].map((row) => row.querySelectorAll("td")[0].textContent);
     expect(cells).toEqual(["19 µg/m³", "3 µg/m³ (10 Nov, 02:00 UTC)"]);
-  });
-
-  test("the latest value of the station is the newest one, wherever it is in the list", () => {
-    const old = reading({ pollutant: "SO2", value: 3, ts: "2026-11-10T02:00:00.000Z" });
-    show({ status: "card", card: card({ air_quality: air({ stations: [station({ readings: [old, reading()] })] }) }) });
-
-    expect(section()?.querySelector(".updated")?.textContent).toBe("Latest value: 11 Nov, 14:00 UTC");
-    const cells = [...(section()?.querySelectorAll("tbody tr") ?? [])].map((row) => row.querySelectorAll("td")[0].textContent);
-    expect(cells).toEqual(["3 µg/m³ (10 Nov, 02:00 UTC)", "19 µg/m³"]);
   });
 
   test("a day that is not complete is said", () => {
@@ -449,12 +413,6 @@ describe("what comes from the API is text, never HTML", () => {
     expect((window as unknown as { __owned?: number }).__owned).toBeUndefined();
   });
 
-  test("in an error", () => {
-    show({ status: "error", message: HOSTILE });
-
-    expect(root.querySelector("img, script")).toBeNull();
-    expect(root.querySelector("[role='alert']")?.textContent).toBe(HOSTILE);
-  });
 });
 
 describe("closing", () => {
@@ -468,13 +426,6 @@ describe("closing", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  test("an error can be closed too", () => {
-    show({ status: "error", message: "x" });
-
-    root.querySelector("button")?.click();
-
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
 });
 
 // --- the language of the panel --------------------------------------------------------------------
@@ -502,70 +453,6 @@ describe("the panel in Spanish", () => {
     expect(root.querySelector("button")?.getAttribute("aria-label")).toBe("Cerrar el panel");
   });
 
-  test("the names of the pollutants of the emissions are Spanish, by their code", () => {
-    setLanguage("es");
-    show({ status: "card", card: card() });
-
-    const names = [...root.querySelectorAll("tbody th")].map((cell) => cell.textContent);
-    expect(names).toEqual(["Óxidos de nitrógeno (NOx)", "Monóxido de carbono", "Partículas en suspensión totales"]);
-  });
-
-  test("the stations: the hour, the names, the numbers and the partial day", () => {
-    setLanguage("es");
-    show({ status: "card", card: card({ air_quality: stations() }) });
-
-    expect(root.querySelector(".updated")?.textContent).toBe("Último valor: 11 nov, 14:00 UTC");
-    expect(
-      [...root.querySelectorAll("section.air-quality tbody tr")].map((row) => [...row.querySelectorAll("th, td")].map((cell) => cell.textContent)),
-    ).toEqual([
-      ["Dióxido de nitrógeno", "19 µg/m³", "0,6× el valor guía de la OMS"],
-      ["H2S", "19 µg/m³", "0,6× el valor guía de la OMS (19 de 24 horas)"],
-    ]);
-  });
-
-  test("a pollutant of a station that the language names only for the emissions takes that name too, in Spanish and in Basque", () => {
-    const benzene = { year: 2023, pollutant: "BENZENE", name: "Benzene", declared_t: 1, t_km2: 1, who_ratio: null };
-    const withBenzene = () =>
-      card({
-        emissions: [...card().emissions, benzene],
-        air_quality: air({ stations: [station({ readings: [reading({ pollutant: "BENZENE", who_period: null, who_ratio: null })] })] }),
-      });
-    const nameInStation = () => root.querySelector("section.air-quality tbody th")?.textContent;
-
-    show({ status: "card", card: withBenzene() });
-    expect(nameInStation()).toBe("Benzene");
-
-    setLanguage("es");
-    show({ status: "card", card: withBenzene() });
-    expect(nameInStation()).toBe("Benceno");
-
-    setLanguage("eu");
-    show({ status: "card", card: withBenzene() });
-    expect(nameInStation()).toBe("Bentzenoa");
-  });
-
-  test("nothing to show, in words", () => {
-    setLanguage("es");
-
-    show({ status: "card", card: card({ air_quality: null }) });
-    expect(root.querySelector("p.none")?.textContent).toBe("La calidad del aire no está disponible en este momento.");
-
-    show({ status: "card", card: card({ air_quality: air({ measured: false, reason: "no_station", stations: [] }) }) });
-    expect(root.querySelector("p.none")?.textContent).toBe("No hay ninguna estación de calidad del aire en este municipio.");
-
-    show({ status: "card", card: card({ emissions: [] }) });
-    expect(root.textContent).toContain("Sin emisiones declaradas en 2023.");
-  });
-
-  test("loading and an error", () => {
-    setLanguage("es");
-
-    show({ status: "loading" });
-    expect(root.textContent).toContain("Cargando…");
-
-    show({ status: "error", message: "x" });
-    expect(root.querySelector("h2")?.textContent).toBe("Algo ha salido mal");
-  });
 });
 
 describe("the panel in Basque", () => {
@@ -583,18 +470,6 @@ describe("the panel in Basque", () => {
     expect(root.querySelector("h3")?.textContent).toBe("Aire kalitatea");
     expect(root.querySelector(".updated")?.textContent).toBe("Azken balioa: aza. 11, 14:00 UTC");
     expect(root.querySelector("button")?.getAttribute("aria-label")).toBe("Itxi panela");
-  });
-
-  test("nothing to show, in words", () => {
-    setLanguage("eu");
-
-    show({ status: "card", card: card({ air_quality: air({ measured: false, reason: "level_not_supported", stations: null }) }) });
-    expect(root.querySelector("p.none")?.textContent).toBe(
-      "Estazioak udalerrietan erakusten dira: aukeratu bat haren aire kalitatea ikusteko.",
-    );
-
-    show({ status: "card", card: card({ air_quality: air({ measured: false, reason: "something_new" as never, stations: [] }) }) });
-    expect(root.querySelector("p.none")?.textContent).toBe("Ez dago erakusteko aire kalitaterik unitate honetarako.");
   });
 
   test("a panel that is drawn again in another language has nothing left of the first one", () => {

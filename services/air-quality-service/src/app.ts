@@ -2,14 +2,14 @@
 // so the tests can build it with the connection and the log they want.
 import swagger from "@fastify/swagger";
 import Fastify, { LogController } from "fastify";
-import type { Db } from "./db.js";
-import { LOGGER, loggerOptions, normalizeLevel } from "./logging.js";
-import { errorHandler, frameworkErrors, notFoundHandler, problem } from "./problems.js";
-import { exposureRoutes } from "./exposure.js";
-import { latestRoutes } from "./latest.js";
-import { measurementRoutes } from "./measurements.js";
-import { stationRoutes } from "./stations.js";
-import { unitStationRoutes } from "./unit-stations.js";
+import type { Db } from "./db.ts";
+import { LOGGER, loggerOptions, pinoLevel } from "./logging.ts";
+import { errorHandler, frameworkErrors, notFoundHandler, problem } from "./problems.ts";
+import { exposureRoutes } from "./exposure.ts";
+import { latestRoutes } from "./latest.ts";
+import { measurementRoutes } from "./measurements.ts";
+import { stationRoutes } from "./stations.ts";
+import { unitStationRoutes } from "./unit-stations.ts";
 
 export const HEALTH_PATH = "/health";
 
@@ -22,7 +22,7 @@ export interface Options {
 
 export async function buildApp({ db, logStream, logLevel }: Options) {
   const app = Fastify({
-    logger: loggerOptions(normalizeLevel(logLevel ?? process.env.LOG_LEVEL), logStream),
+    logger: loggerOptions(pinoLevel(logLevel ?? process.env.LOG_LEVEL), logStream),
     frameworkErrors,
     // One line per request, written below with the same fields as the Python services.
     logController: new LogController({ disableRequestLogging: true }),

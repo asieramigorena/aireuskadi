@@ -1,4 +1,4 @@
-import type { Db } from "../src/db.js";
+import type { Db } from "../src/db.ts";
 
 /** A database that answers with the rows it is given and remembers what it was asked. */
 export function fakeDb(rows: unknown[] = []): Db & { asked: string[] } {
