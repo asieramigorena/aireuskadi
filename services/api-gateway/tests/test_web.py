@@ -6,16 +6,15 @@ published, and a name cannot walk out of the folder.
 """
 
 import pytest
-from conftest import INDEX
 
 
 @pytest.mark.parametrize("path", ["/", "/unit/01036", "/unit/9901", "/unit/48"])
-def test_the_page_is_served_at_the_root_and_at_each_unit(web_client, path):
+def test_the_page_is_served_at_the_root_and_at_each_unit(web_client, web_dir, path):
     response = web_client.get(path)
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert response.text == INDEX
+    assert response.text == (web_dir / "index.html").read_text()
 
 
 def test_the_page_is_always_asked_for_again_before_it_is_used(web_client):
@@ -40,12 +39,12 @@ def test_the_page_is_always_asked_for_again_before_it_is_used(web_client):
         "/other",
     ],
 )
-def test_any_other_path_of_the_page_is_a_404_and_not_the_page(web_client, path):
+def test_any_other_path_of_the_page_is_a_404_and_not_the_page(web_client, web_dir, path):
     response = web_client.get(path, follow_redirects=False)
 
     assert response.status_code == 404
     assert response.headers["content-type"] == "application/problem+json"
-    assert INDEX not in response.text
+    assert (web_dir / "index.html").read_text() not in response.text
 
 
 @pytest.mark.parametrize(

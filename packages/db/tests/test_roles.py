@@ -1,4 +1,4 @@
-"""The read-only role of the services that only read: what it can and cannot do.
+"""The roles of the services: what the read-only role and the role of the auth service can and cannot do.
 
 Skipped unless DATABASE_URL points to a database whose user can create roles (the owner).
 The tests connect as the role itself and try things; the role is dropped afterwards.
@@ -8,6 +8,7 @@ import os
 
 import pytest
 from aireuskadi_db import SCHEMA, Base, create_reader_role, migrate
+from aireuskadi_db.roles import create_auth_role
 from aireuskadi_db.schema import main
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
@@ -17,6 +18,7 @@ URL = os.environ.get("DATABASE_URL")
 pytestmark = pytest.mark.skipif(not URL, reason="DATABASE_URL is not set")
 
 USER = "t_reader_test"
+AUTH = "t_auth_test"
 PASSWORD = "first-Pa55_word"
 
 
@@ -26,9 +28,10 @@ def owner():
     migrate(engine)
     yield engine
     with engine.begin() as conn:
-        if conn.scalar(text("SELECT 1 FROM pg_roles WHERE rolname = :r"), {"r": USER}):
-            conn.execute(text(f"DROP OWNED BY {USER}"))  # takes its privileges away first
-            conn.execute(text(f"DROP ROLE {USER}"))
+        for role in (USER, AUTH):
+            if conn.scalar(text("SELECT 1 FROM pg_roles WHERE rolname = :r"), {"r": role}):
+                conn.execute(text(f"DROP OWNED BY {role}"))  # takes its privileges away first
+                conn.execute(text(f"DROP ROLE {role}"))
     engine.dispose()
 
 
@@ -63,6 +66,12 @@ def test_it_cannot_read_the_record_of_the_loads(reader):
     # ingestion_run holds source URLs, file hashes and error texts: nothing that is served.
     with pytest.raises(ProgrammingError, match="permission denied"), reader.connect() as conn:
         conn.execute(text(f"SELECT * FROM {SCHEMA}.ingestion_run"))
+
+
+def test_it_cannot_read_the_accounts(reader):
+    # The services that answer the public never see a password hash.
+    with pytest.raises(ProgrammingError, match="permission denied"), reader.connect() as conn:
+        conn.execute(text("SELECT hashed_password FROM auth.app_user"))
 
 
 def test_it_has_no_privilege_to_change_anything(owner, reader):
@@ -139,3 +148,45 @@ def test_the_command_refuses_half_of_the_credentials_instead_of_guessing(
 
     with pytest.raises(SystemExit, match="POSTGRES_READER_USER"):
         main()
+
+
+# The role of the auth service: it reads the accounts to log people in, and changes only is_admin.
+
+
+@pytest.fixture
+def auth_role(owner):
+    create_auth_role(owner, AUTH, PASSWORD)
+    engine = create_engine(make_url(URL).set(username=AUTH, password=PASSWORD))
+    yield engine
+    engine.dispose()
+
+
+def test_the_auth_service_reads_the_accounts_and_changes_only_is_admin(auth_role):
+    with auth_role.begin() as conn:
+        conn.execute(text("SELECT username, hashed_password, is_admin FROM auth.app_user"))
+        conn.execute(text("UPDATE auth.app_user SET is_admin = false WHERE id = -1"))
+
+    forbidden = [
+        "UPDATE auth.app_user SET hashed_password = 'x' WHERE id = -1",
+        "INSERT INTO auth.app_user (username) VALUES ('user1')",
+        "DELETE FROM auth.app_user",
+        f"SELECT count(*) FROM {SCHEMA}.municipality",
+    ]
+    for statement in forbidden:
+        with pytest.raises(ProgrammingError, match="permission denied"), auth_role.begin() as conn:
+            conn.execute(text(statement))
+
+
+def test_the_command_creates_the_role_of_the_auth_service_too(owner, monkeypatch):
+    monkeypatch.setenv("POSTGRES_AUTH_USER", AUTH)
+    monkeypatch.setenv("POSTGRES_AUTH_PASSWORD", PASSWORD)
+    # Roles belong to the whole server: the real reader role of .env must not be touched.
+    monkeypatch.delenv("POSTGRES_READER_USER", raising=False)
+    monkeypatch.delenv("POSTGRES_READER_PASSWORD", raising=False)
+
+    main()
+
+    engine = create_engine(make_url(URL).set(username=AUTH, password=PASSWORD))
+    with engine.connect() as conn:
+        conn.execute(text("SELECT count(*) FROM auth.app_user"))
+    engine.dispose()

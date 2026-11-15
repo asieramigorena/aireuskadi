@@ -23,15 +23,19 @@ It is published at <https://aireuskadi.taila95ab4.ts.net>.
 Requirements: [uv](https://docs.astral.sh/uv/), Node.js 22 or later, Docker with Compose.
 
 ```sh
-# Settings: copy the example and set your own passwords
+# Settings: copy the example and set your own passwords and a JWT_SECRET
 cp .env.example .env
 
 # Database and Redis
 docker compose up -d --wait postgres redis
 
-# Python components, the schema (its migrations) and the read-only role of the services
+# Python components, the schema (its migrations) and the roles of the services
 uv sync --all-packages
 uv run --env-file .env aireuskadi-db-init
+
+# An admin account (asks the password), named like GRAFANA_ADMIN_USER of .env
+uv run --env-file .env aireuskadi-admin add <name>
+uv run --env-file .env aireuskadi-admin promote <name>
 
 # Data: the boundaries first, then the E-PRTR register of one year and the last hours of
 # measurements (all safe to repeat)
@@ -50,8 +54,8 @@ The web page is on <http://localhost:5173> while you work on it, and compiled, a
 on <http://127.0.0.1:8080> (rebuild it with `docker compose up -d --build api-gateway`).
 
 The API is on <http://127.0.0.1:8080/api/v1/> (the gateway, `GATEWAY_PORT` of `.env`).
-Grafana, with the logs and the state of the services, is on <http://127.0.0.1:3000> (user
-`admin`, password `GRAFANA_ADMIN_PASSWORD` of `.env`).
+Grafana, with the logs and the state of the services, is on <http://127.0.0.1:8080/admin>: log in
+with an admin account. Admins make other accounts admins at `/admin/users`.
 
 Optional: to show your own copy on the internet, `tunnel/` has a Tailscale Funnel that publishes only
 the gateway. Put an auth key in `TS_AUTHKEY` of `.env` and run

@@ -21,7 +21,10 @@ URL = os.environ.get("DATABASE_URL")
 
 pytestmark = pytest.mark.skipif(not URL, reason="DATABASE_URL is not set")
 
-HEAD = "0002"
+HEAD = "0003"
+
+# What create_all() used to make: the tables of core (the accounts, in auth, came with 0003).
+CORE_TABLES = [table for table in Base.metadata.sorted_tables if table.schema == SCHEMA]
 
 
 @pytest.fixture
@@ -44,7 +47,7 @@ def version(engine):
         return conn.scalar(text("SELECT version_num FROM alembic_version"))
 
 
-def test_an_empty_database_gets_every_table_and_the_view_already_filled(empty_engine):
+def test_an_empty_database_gets_the_tables_of_core_and_the_view_already_filled(empty_engine):
     migrate(empty_engine)
 
     with empty_engine.connect() as conn:
@@ -57,7 +60,7 @@ def test_an_empty_database_gets_every_table_and_the_view_already_filled(empty_en
         populated = conn.scalar(
             text("SELECT ispopulated FROM pg_matviews WHERE matviewname = 'unit_indicator'")
         )
-    assert {table.name for table in Base.metadata.sorted_tables} <= tables
+    assert {table.name for table in CORE_TABLES} <= tables
     # REFRESH ... CONCURRENTLY, which the worker uses, is refused on a view never filled.
     assert populated is True
     assert version(empty_engine) == HEAD
@@ -82,7 +85,7 @@ def test_a_database_made_before_the_migrations_is_marked_and_not_made_again(empt
     with empty_engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
         conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}"))
-        Base.metadata.create_all(conn)
+        Base.metadata.create_all(conn, tables=CORE_TABLES)
         for statement in UNIT_INDICATOR_DDL.split(";"):
             if statement.strip():
                 conn.execute(text(statement))
@@ -118,7 +121,7 @@ def test_a_database_made_before_without_the_indexes_of_the_simplified_boundaries
     with empty_engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
         conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}"))
-        Base.metadata.create_all(conn)
+        Base.metadata.create_all(conn, tables=CORE_TABLES)
         for statement in UNIT_INDICATOR_DDL.split(";"):
             if statement.strip():
                 conn.execute(text(statement))
