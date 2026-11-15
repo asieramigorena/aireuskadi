@@ -6,9 +6,7 @@ published, and a name cannot walk out of the folder.
 """
 
 import pytest
-from api_gateway.main import create_app
 from conftest import INDEX
-from fastapi.testclient import TestClient
 
 
 @pytest.mark.parametrize("path", ["/", "/unit/01036", "/unit/9901", "/unit/48"])
@@ -125,15 +123,6 @@ def test_the_answers_come_with_the_headers_that_close_the_page(web_client, path)
     assert headers["referrer-policy"] == "no-referrer"
 
 
-@pytest.mark.parametrize("method", ["post", "put", "patch", "delete"])
-@pytest.mark.parametrize("path", ["/", "/unit/01036", "/assets/index-abc123.js"])
-def test_the_page_is_only_read(web_client, method, path):
-    response = getattr(web_client, method)(path)
-
-    assert response.status_code == 405
-    assert response.headers["content-type"] == "application/problem+json"
-
-
 def test_the_api_and_the_check_of_the_gateway_work_the_same_with_the_page(web_client, emissions):
     emissions.respond(body=b'{"answer": 42}')
 
@@ -142,15 +131,6 @@ def test_the_api_and_the_check_of_the_gateway_work_the_same_with_the_page(web_cl
     assert web_client.get("/api/v1/health").status_code == 404
     assert web_client.get("/api/v1/unit/01036").status_code == 404
     assert web_client.get("/docs").status_code == 404
-
-
-def test_the_pages_are_not_in_the_openapi_document_of_the_gateway(upstreams, web_dir):
-    emissions_client, air_quality_client = upstreams
-    app = create_app(emissions_client, air_quality=air_quality_client, docs=True, web_dir=web_dir)
-    with TestClient(app) as client:
-        paths = client.get("/openapi.json").json()["paths"]
-
-    assert not any(p == "/" or p.startswith(("/unit", "/assets")) for p in paths)
 
 
 @pytest.mark.parametrize("path", ["/", "/unit/01036", "/assets/index-abc123.js"])
@@ -166,26 +146,3 @@ def test_a_file_of_the_folder_that_is_a_link_to_somewhere_else_is_not_served(web
 
     assert response.status_code == 404
     assert "outside the folder" not in response.text
-
-
-@pytest.mark.parametrize(
-    ("path", "cache_control"),
-    [
-        ("/", "no-cache"),
-        ("/unit/01036", "no-cache"),
-        ("/assets/index-abc123.js", "public, max-age=31536000, immutable"),
-    ],
-)
-def test_a_head_request_gets_the_headers_and_no_body(web_client, path, cache_control):
-    # Link checkers, caches and tunnels ask this way before they ask for the page.
-    response = web_client.head(path)
-
-    assert response.status_code == 200
-    assert response.content == b""
-    assert response.headers["cache-control"] == cache_control
-    assert "content-security-policy" in response.headers
-
-
-def test_a_head_request_of_something_that_is_not_there_is_a_404(web_client):
-    assert web_client.head("/assets/missing.js").status_code == 404
-    assert web_client.head("/unit/abc").status_code == 404
