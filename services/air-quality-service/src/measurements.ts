@@ -1,9 +1,9 @@
 // GET /stations/{id}/measurements: the time series of one pollutant at one station.
 import type { FastifyInstance } from "fastify";
-import type { Db } from "./db.js";
-import { INVALID_REQUEST, NOT_FOUND, invalidParameter, problem } from "./problems.js";
-import { ATTRIBUTION } from "./stations.js";
-import { KNOWN_UNIT, MIN_HOURS_FOR_A_MEAN, TO_UGM3 } from "./units.js";
+import type { Db } from "./db.ts";
+import { INVALID_REQUEST, NOT_FOUND, invalidParameter, problem } from "./problems.ts";
+import { ATTRIBUTION } from "./stations.ts";
+import { KNOWN_UNIT, MIN_HOURS_FOR_A_MEAN, TO_UGM3 } from "./units.ts";
 
 // A series cannot be as long as the caller wants: an hourly one is at most 31 days (744 points)
 // and a daily one at most 366 days (one year), which is what a chart can draw and keeps each

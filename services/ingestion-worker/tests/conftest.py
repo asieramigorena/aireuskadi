@@ -4,7 +4,7 @@ import os
 
 import geopandas as gpd
 import pytest
-from aireuskadi_db import IngestionRun, create_all
+from aireuskadi_db import IngestionRun, migrate
 from ingestion_worker.boundaries.layers import (
     district_records,
     load_boundaries,
@@ -23,7 +23,7 @@ def session():
     if not url:
         pytest.skip("DATABASE_URL is not set")
     engine = create_engine(url)
-    create_all(engine)
+    migrate(engine)
     with Session(engine) as session:
         yield session
         session.rollback()
@@ -58,7 +58,7 @@ def engine():
     if not url:
         pytest.skip("DATABASE_URL is not set")
     engine = create_engine(url)
-    create_all(engine)
+    migrate(engine)
     with Session(engine) as session:
         first_run = session.scalar(select(IngestionRun.id).order_by(IngestionRun.id.desc()))
     yield engine

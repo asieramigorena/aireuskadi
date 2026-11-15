@@ -23,7 +23,11 @@ router = APIRouter()
 ATTRIBUTION = "GeoEuskadi / Gobierno Vasco, CC BY 4.0, simplified"
 
 
-class UnitProperties(BaseModel):
+Level = Literal["municipality", "district", "territory"]
+LEVEL_TABLE = {"municipality": Municipality, "district": District, "territory": Territory}
+
+
+class UnitIndicators(BaseModel):
     code: str
     name: str
     declared_t: float | None
@@ -31,16 +35,21 @@ class UnitProperties(BaseModel):
     who_ratio: float | None
 
 
-class UnitFeature(BaseModel):
+class BoundaryProperties(BaseModel):
+    code: str
+    name: str
+
+
+class BoundaryFeature(BaseModel):
     type: Literal["Feature"] = "Feature"
     geometry: dict[str, Any] | None
-    properties: UnitProperties
+    properties: BoundaryProperties
 
 
-class UnitCollection(BaseModel):
+class BoundaryCollection(BaseModel):
     type: Literal["FeatureCollection"] = "FeatureCollection"
     attribution: str = ATTRIBUTION
-    features: list[UnitFeature]
+    features: list[BoundaryFeature]
 
 
 def number(value):
@@ -61,7 +70,6 @@ def municipality_rows(pollutant, year):
         select(
             Municipality.ine_code,
             Municipality.name,
-            func.ST_AsGeoJSON(Municipality.geom_simplified, 6),
             unit_indicator.c.declared_t,
             unit_indicator.c.t_km2,
             unit_indicator.c.who_ratio,
@@ -79,7 +87,6 @@ def grouped_rows(unit, pollutant, year):
     query = select(
         unit.code,
         unit.name,
-        func.ST_AsGeoJSON(unit.geom_simplified, 6),
         func.sum(unit_indicator.c.declared_t),
         func.sum(unit_indicator.c.declared_t) / func.nullif(func.sum(Municipality.area_km2), 0),
         null(),
@@ -100,32 +107,48 @@ def grouped_rows(unit, pollutant, year):
 @router.get("/units", responses=INVALID_REQUEST)
 def units(
     session: SessionDep,
-    level: Literal["municipality", "district", "territory"],
+    level: Level,
     pollutant: PollutantParam,
     year: YearParam,
-) -> UnitCollection:
-    """Every unit of the level as a GeoJSON feature: its simplified boundary and, for the
-    pollutant and the year, the tonnes declared, the tonnes per km2 and the ratio with the WHO
-    guideline. A unit without data for them is there with nulls. The year has to be one that has
-    ended and not earlier than the first year with data."""
+) -> list[UnitIndicators]:
+    """Every unit of the level with, for the pollutant and the year, the tonnes declared, the
+    tonnes per km2 and the ratio with the WHO guideline. A unit without data for them is there with
+    nulls. No boundaries: they do not change with the pollutant or the year, and they are what
+    weighs (GET /units/boundaries). The year has to be one that has ended and not earlier than the
+    first year with data."""
     refuse_year_out_of_range(year, session)
     if level == "municipality":
         query = municipality_rows(pollutant, year)
     else:
-        query = grouped_rows(District if level == "district" else Territory, pollutant, year)
-    return UnitCollection(
+        query = grouped_rows(LEVEL_TABLE[level], pollutant, year)
+    return [
+        UnitIndicators(
+            code=code,
+            name=name,
+            declared_t=number(declared),
+            t_km2=number(density),
+            who_ratio=number(ratio),
+        )
+        for code, name, declared, density, ratio in session.execute(query)
+    ]
+
+
+@router.get("/units/boundaries", responses=INVALID_REQUEST)
+def boundaries(session: SessionDep, level: Level) -> BoundaryCollection:
+    """The simplified boundary of every unit of the level, as GeoJSON, with the credit that its
+    licence asks for. They are the same for every pollutant and year: the map asks for them once."""
+    unit = LEVEL_TABLE[level]
+    code = Municipality.ine_code if unit is Municipality else unit.code
+    rows = session.execute(
+        select(code, unit.name, func.ST_AsGeoJSON(unit.geom_simplified, 6)).order_by(code)
+    )
+    return BoundaryCollection(
         features=[
-            UnitFeature(
+            BoundaryFeature(
                 geometry=None if geometry is None else json.loads(geometry),
-                properties=UnitProperties(
-                    code=code,
-                    name=name,
-                    declared_t=number(declared),
-                    t_km2=number(density),
-                    who_ratio=number(ratio),
-                ),
+                properties=BoundaryProperties(code=code, name=name),
             )
-            for code, name, geometry, declared, density, ratio in session.execute(query)
+            for code, name, geometry in rows
         ]
     )
 
@@ -151,7 +174,7 @@ class UnitEmission(BaseModel):
 
 class UnitCard(BaseModel):
     code: str
-    level: Literal["municipality", "district", "territory"]
+    level: Level
     name: str
     area_km2: float
     district: UnitReference | None

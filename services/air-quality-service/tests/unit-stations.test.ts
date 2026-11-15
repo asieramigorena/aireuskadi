@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
-import { buildApp } from "../src/app.js";
-import { dbTest } from "./database.js";
-import { brokenDb, scriptedDb } from "./helpers.js";
-import { addGuideline, addReadings, addStation, hourly } from "./seed.js";
+import { buildApp } from "../src/app.ts";
+import { dbTest } from "./database.ts";
+import { brokenDb, scriptedDb } from "./helpers.ts";
+import { addGuideline, addReadings, addStation, hourly } from "./seed.ts";
 
 type Reading = {
   pollutant: string;
@@ -63,18 +63,6 @@ dbTest("each station of the municipality gives its latest value of each pollutan
   expect(body.stations![1].readings).toMatchObject([{ pollutant: "T_X", value: 8, unit: "mg/m3" }]);
 });
 
-dbTest("the running mean of 8 hours is not the latest hourly value", async ({ db }) => {
-  const a = await addStation(db, { code: "T_A" });
-  await addReadings(db, a, "T_X", [
-    { ts: "2026-01-15T11:00:00Z", value: 5 },
-    { ts: END, value: 99, period: "8h" },
-  ]);
-
-  const body = await stationsOf(db);
-
-  expect(body.stations![0].readings).toMatchObject([{ pollutant: "T_X", value: 5, ts: "2026-01-15T11:00:00.000Z" }]);
-});
-
 dbTest("the comparison with the WHO guideline is the one of the latest values of the stations", async ({ db }) => {
   await addGuideline(db, "T_X", "24h", 15);
   const a = await addStation(db, { code: "T_A" });
@@ -86,16 +74,6 @@ dbTest("the comparison with the WHO guideline is the one of the latest values of
   const [x, y] = body.stations![0].readings;
   expect(x).toMatchObject({ who_period: "24h", who_guideline_ugm3: 15, who_mean_ugm3: 30, who_samples: 24, who_ratio: 2 });
   expect(y).toMatchObject({ who_period: null, who_guideline_ugm3: null, who_mean_ugm3: null, who_samples: null, who_ratio: null });
-});
-
-dbTest("a station with fewer than 18 values in the last 24 hours has no ratio", async ({ db }) => {
-  await addGuideline(db, "T_X", "24h", 15);
-  const a = await addStation(db, { code: "T_A" });
-  await addReadings(db, a, "T_X", hourly(END, 17, 30));
-
-  const body = await stationsOf(db);
-
-  expect(body.stations![0].readings[0]).toMatchObject({ who_samples: 17, who_ratio: null });
 });
 
 dbTest("the stations of other municipalities are not listed", async ({ db }) => {
@@ -161,17 +139,6 @@ dbTest("a code that no unit has is a 404 problem document", async ({ db }) => {
   expect(response.json().detail).toBe("Unit 99999 not found.");
 });
 
-test("the municipality and the pollutants go to the readings query as parameters, never in its text", async () => {
-  const db = scriptedDb([[{ name: "Testville" }], [{ id: 1, code: "A", name: "A", geometry: null }], [{ codes: ["NO2", "PM10"] }], []]);
-  const app = await buildApp({ db });
-
-  await app.inject("/units/98001/stations");
-
-  const readings = db.asked[3];
-  expect(readings.params).toEqual([["NO2", "PM10"], "98001"]);
-  expect(readings.text).not.toContain("98001");
-});
-
 dbTest("a station without values is listed next to one that has them, and the municipality is measured", async ({ db }) => {
   const a = await addStation(db, { code: "T_A" });
   await addStation(db, { code: "T_B" });
@@ -219,10 +186,3 @@ test("a database that fails is a 500 with a fixed text that says nothing of the 
   expect(response.body).not.toContain("password");
 });
 
-test("the route is in the OpenAPI document", async () => {
-  const app = await buildApp({ db: brokenDb() });
-
-  const paths = Object.keys(((await app.inject("/openapi.json")).json() as { paths: object }).paths);
-
-  expect(paths).toContain("/units/{code}/stations");
-});

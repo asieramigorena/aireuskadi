@@ -1,6 +1,6 @@
 // The rows that the tests with a database need. Their codes start with T so that they are not
 // mistaken for real ones, and everything is rolled back with the transaction of the test.
-import type { Db } from "../src/db.js";
+import type { Db } from "../src/db.ts";
 
 export async function addMunicipality(db: Db, code = "98001", name = "Testville") {
   await db.query(

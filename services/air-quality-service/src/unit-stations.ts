@@ -3,11 +3,11 @@
 // /stations/latest gives). It is what the panel of a unit shows, and what the gateway adds to the
 // card of the unit.
 import type { FastifyInstance } from "fastify";
-import type { Db } from "./db.js";
-import { LATEST, type Row, reading, readingProperties } from "./latest.js";
-import { INVALID_REQUEST, NOT_FOUND, problem } from "./problems.js";
-import { ATTRIBUTION, pointGeometry } from "./stations.js";
-import { UNITS, UNIT_CODE } from "./units.js";
+import type { Db } from "./db.ts";
+import { LATEST, type Row, reading, readingProperties } from "./latest.ts";
+import { INVALID_REQUEST, NOT_FOUND, problem } from "./problems.ts";
+import { ATTRIBUTION, pointGeometry } from "./stations.ts";
+import { UNITS, UNIT_CODE } from "./units.ts";
 
 const STATIONS = `
   SELECT s.id, s.code, s.name, ST_AsGeoJSON(s.geom, 6)::json AS geometry

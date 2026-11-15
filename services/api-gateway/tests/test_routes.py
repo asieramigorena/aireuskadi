@@ -7,6 +7,7 @@ ROUTES = [
     ("/api/v1/facilities/points?pollutant=NOX&year=2023", "/facilities/points"),
     ("/api/v1/facilities/12", "/facilities/12"),
     ("/api/v1/units?level=municipality&pollutant=NOX&year=2023", "/units"),
+    ("/api/v1/units/boundaries?level=municipality", "/units/boundaries"),
 ]  # the card of a unit (/units/<code>) is put together from two services: test_unit_card_composition.py
 
 
@@ -23,6 +24,13 @@ def test_each_published_route_is_asked_to_the_emissions_service_and_its_answer_c
     (sent,) = emissions.requests
     assert sent.url.path == internal
     assert sent.method == "GET"
+
+
+def test_the_boundaries_take_only_the_level(client, emissions):
+    client.get("/api/v1/units/boundaries?level=district&pollutant=NOX&year=2023")
+
+    (sent,) = emissions.requests
+    assert dict(sent.url.params) == {"level": "district"}
 
 
 def test_the_parameters_of_a_route_travel_to_the_emissions_service(client, emissions):
@@ -42,6 +50,7 @@ def test_the_parameters_of_a_route_travel_to_the_emissions_service(client, emiss
         "/api/v1/pollutants/",
         "/api/v1/units/",
         "/api/v1/units/01036/extra",
+        "/api/v1/units/boundaries/",
         "/api/v1/facilities/points/",
         "/pollutants",
         "/units/01036",

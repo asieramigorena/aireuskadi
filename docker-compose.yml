@@ -1,4 +1,4 @@
-# Local development stack: PostgreSQL + PostGIS and Redis.
+# Local development stack: PostgreSQL + PostGIS, Redis (the cache of the gateway) and the services.
 # Copy .env.example to .env before running `docker compose up -d`.
 # The application services are added here as they get their Dockerfile.
 # Loki, Alloy, Prometheus and Grafana start with the rest: the logs and the state of every service
@@ -37,10 +37,14 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # The cache of the gateway (services/api-gateway/src/api_gateway/cache.py). Nothing in it must
+  # survive: no disk, and a ceiling of memory past which the oldest answers are dropped, so that
+  # questions with made-up values cannot fill the machine.
   redis:
     image: redis:7-alpine
-    ports:
-      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    # Only the gateway reaches it, and it publishes no port: what is in it is served to the browser.
+    networks: [cache]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -112,15 +116,20 @@ services:
     environment:
       EMISSIONS_URL: http://emissions-service:8000
       AIR_QUALITY_URL: http://air-quality-service:8000
+      # Without it the gateway asks the services every time, as before.
+      REDIS_URL: redis://redis:6379/0
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-8080}:8000"
-    # It also joins `edge`, the only network the tunnel is on.
-    networks: [default, edge]
+    # It also joins `edge`, the only network the tunnel is on, and `cache`, the only one Redis is on.
+    networks: [default, edge, cache]
     depends_on:
       emissions-service:
         condition: service_healthy
       air-quality-service:
         condition: service_healthy
+      # Started, not healthy: without Redis the gateway still answers.
+      redis:
+        condition: service_started
     # The check of the gateway itself: it does not ask any service. The image has no curl.
     healthcheck:
       test:
@@ -258,6 +267,7 @@ services:
 
 networks:
   edge:
+  cache:
 
 volumes:
   postgres-data:

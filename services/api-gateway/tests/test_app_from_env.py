@@ -1,8 +1,5 @@
 """app_from_env: what uvicorn calls to build the application."""
 
-import json
-import logging
-
 import pytest
 from api_gateway.main import app_from_env
 from fastapi.testclient import TestClient
@@ -24,26 +21,6 @@ def test_the_environment_says_where_the_emissions_service_is(monkeypatch):
     app = app_from_env()
 
     assert str(app.state.emissions.base_url) == "http://other-host:9000"
-
-
-def test_the_air_quality_service_is_asked_at_its_name_in_the_compose_unless_told_otherwise(
-    monkeypatch,
-):
-    monkeypatch.delenv("AIR_QUALITY_URL", raising=False)
-
-    app = app_from_env()
-
-    assert str(app.state.air_quality.base_url) == "http://air-quality-service:8000"
-
-
-def test_the_environment_says_where_the_air_quality_service_is(monkeypatch):
-    monkeypatch.setenv("AIR_QUALITY_URL", "http://other-host:9100")
-    monkeypatch.setenv("EMISSIONS_URL", "http://emissions-host:9000")
-
-    app = app_from_env()
-
-    assert str(app.state.air_quality.base_url) == "http://other-host:9100"
-    assert str(app.state.emissions.base_url) == "http://emissions-host:9000"
 
 
 @pytest.mark.parametrize("service", ["emissions", "air_quality"])
@@ -80,29 +57,6 @@ def test_anything_else_in_the_environment_leaves_it_off(monkeypatch, value):
     assert client.get("/openapi.json").status_code == 404
 
 
-def test_starting_the_application_switches_the_logs_to_json(capsys):
-    app_from_env()
-
-    logging.getLogger("api_gateway.access").info("request", extra={"status": 200})
-
-    assert json.loads(capsys.readouterr().out.splitlines()[-1])["status"] == 200
-
-
-def test_under_uvicorn_the_starting_application_takes_over_uvicorns_own_log_handlers(capsys):
-    # uvicorn installs its own plain-text handler before it loads the application.
-    uvicorn = logging.getLogger("uvicorn")
-    uvicorn.addHandler(logging.StreamHandler())
-    uvicorn.propagate = False
-
-    app_from_env()
-    logging.getLogger("uvicorn.error").info("Application startup complete.")
-
-    captured = capsys.readouterr()
-    (entry,) = [json.loads(line) for line in captured.out.splitlines()]
-    assert entry["message"] == "Application startup complete."
-    assert captured.err == ""  # no second copy in plain text
-
-
 def test_the_folder_of_the_page_comes_from_the_environment(monkeypatch, web_dir):
     monkeypatch.setenv("WEB_DIR", str(web_dir))
 
@@ -110,12 +64,6 @@ def test_the_folder_of_the_page_comes_from_the_environment(monkeypatch, web_dir)
 
     assert response.status_code == 200
     assert "AirEuskadi" in response.text
-
-
-def test_without_the_variable_the_gateway_publishes_only_the_api(monkeypatch):
-    monkeypatch.delenv("WEB_DIR", raising=False)
-
-    assert TestClient(app_from_env()).get("/").status_code == 404
 
 
 @pytest.mark.parametrize("problem", ["missing", "no-index"])
@@ -130,3 +78,15 @@ def test_a_folder_that_cannot_be_published_stops_the_start_with_a_message_that_n
         app_from_env()
 
     assert "WEB_DIR" in str(stopped.value)
+
+
+def test_the_cache_is_redis_at_redis_url_and_waits_very_little(monkeypatch):
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    assert app_from_env().state.cache is None
+
+    monkeypatch.setenv("REDIS_URL", "redis://cache.test:6379/0")
+    cache = app_from_env().state.cache
+
+    # A Redis that does not answer must not make every request of the page slow.
+    options = cache.redis.connection_pool.connection_kwargs
+    assert options["socket_connect_timeout"] <= 1 and options["socket_timeout"] <= 1

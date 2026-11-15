@@ -33,11 +33,11 @@ describe("the calls go only to the gateway, to the routes of /api/v1", () => {
     expect(Object.fromEntries(url.searchParams)).toEqual({ pollutant: "NOX", year: "2023" });
   });
 
-  test("the units of a level", async () => {
-    const collection = { type: "FeatureCollection", attribution: "x", features: [] };
-    const { api, fetchFn } = apiWith(answer(collection));
+  test("the indicators of the units of a level, for the pollutant and the year", async () => {
+    const indicators = [{ code: "4801", name: "x", declared_t: 1, t_km2: 2, who_ratio: null }];
+    const { api, fetchFn } = apiWith(answer(indicators));
 
-    expect(await api.units("district", SELECTION)).toEqual(collection);
+    expect(await api.units("district", SELECTION)).toEqual(indicators);
 
     const url = urlOf(fetchFn);
     expect(url.pathname).toBe("/api/v1/units");
@@ -46,6 +46,17 @@ describe("the calls go only to the gateway, to the routes of /api/v1", () => {
       pollutant: "NOX",
       year: "2023",
     });
+  });
+
+  test("the boundaries of a level, which do not depend on the pollutant or the year", async () => {
+    const collection = { type: "FeatureCollection", attribution: "x", features: [] };
+    const { api, fetchFn } = apiWith(answer(collection));
+
+    expect(await api.boundaries("territory")).toEqual(collection);
+
+    const url = urlOf(fetchFn);
+    expect(url.pathname).toBe("/api/v1/units/boundaries");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ level: "territory" });
   });
 
   test("the card of one unit", async () => {

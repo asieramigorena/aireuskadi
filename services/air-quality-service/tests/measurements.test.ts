@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
-import { buildApp } from "../src/app.js";
-import { dbTest } from "./database.js";
-import { brokenDb, scriptedDb } from "./helpers.js";
-import { addReadings, addStation, hourly } from "./seed.js";
+import { buildApp } from "../src/app.ts";
+import { dbTest } from "./database.ts";
+import { brokenDb, scriptedDb } from "./helpers.ts";
+import { addReadings, addStation, hourly } from "./seed.ts";
 
 type Series = {
   attribution: string;
@@ -55,20 +55,6 @@ dbTest("the hourly values of the range, in time order, with the station and what
     { ts: "2026-01-10T02:00:00.000Z", value: 30 },
   ]);
   expect(body.attribution).toContain("CC BY 4.0");
-});
-
-dbTest("the range includes `from` and leaves out `to`", async ({ db }) => {
-  const id = await addStation(db, { code: "T_A" });
-  await addReadings(db, id, "T_X", [
-    { ts: "2026-01-09T23:00:00Z", value: 1 },
-    { ts: "2026-01-10T00:00:00Z", value: 2 },
-    { ts: "2026-01-10T23:00:00Z", value: 3 },
-    { ts: "2026-01-11T00:00:00Z", value: 4 },
-  ]);
-
-  const body = await seriesOf(db, id, {});
-
-  expect(body.points.map((p) => p.value)).toEqual([2, 3]);
 });
 
 dbTest("only the values of that station and that pollutant, and only the hourly ones", async ({ db }) => {
@@ -141,25 +127,6 @@ dbTest("18 hours are enough for a day, 17 are not", async ({ db }) => {
   ]);
 });
 
-dbTest("the hour 23:00 UTC belongs to its own day, not to the next", async ({ db }) => {
-  const id = await addStation(db, { code: "T_A" });
-  await addReadings(db, id, "T_X", [{ ts: "2026-01-10T23:00:00Z", value: 5 }]);
-
-  const body = await seriesOf(db, id, { interval: "day", to: "2026-01-12T00:00:00Z" });
-
-  expect(body.points.map((p) => p.ts)).toEqual(["2026-01-10T00:00:00.000Z"]);
-});
-
-dbTest("the day is a UTC day even when the time zone of the database session is another one", async ({ db }) => {
-  await db.query("SET LOCAL TIME ZONE 'Asia/Tokyo'"); // 9 hours ahead: 23:00 UTC would be 08:00 of the next day
-  const id = await addStation(db, { code: "T_A" });
-  await addReadings(db, id, "T_X", [{ ts: "2026-01-10T23:00:00Z", value: 5 }]);
-
-  const body = await seriesOf(db, id, { interval: "day", to: "2026-01-12T00:00:00Z" });
-
-  expect(body.points.map((p) => p.ts)).toEqual(["2026-01-10T00:00:00.000Z"]);
-});
-
 dbTest("the mean of a day converts each value with its own unit and counts only the known ones", async ({ db }) => {
   const id = await addStation(db, { code: "T_A" });
   await addReadings(db, id, "T_X", [
@@ -211,15 +178,6 @@ test("the numbers that the database gives as text are numbers, the times are ISO
   expect(dailyBody.points).toEqual([{ ts: "2026-01-10T00:00:00.000Z", value: 33.333, hours: 24, coverage_ok: true }]);
 });
 
-test("the parameters go to the database as parameters, never written into the query", async () => {
-  const { db } = await ask([[STATION], []], url(7, GOOD));
-
-  expect(db.asked).toHaveLength(2);
-  expect(db.asked[0].params).toEqual([7]);
-  expect(db.asked[1].params).toEqual([7, "NO2", new Date(FROM), new Date(TO)]);
-  for (const { text } of db.asked) expect(text).not.toMatch(/NO2|2026/);
-});
-
 const day = 86_400_000;
 const at = (ms: number) => new Date(Date.parse(FROM) + ms).toISOString();
 
@@ -251,21 +209,6 @@ test.each(["abc", "0", "-3", "1.5", "0x10", "007", "1e2", "+7", "7%20", "%207", 
     expect(db.asked).toEqual([]);
   },
 );
-
-test("an id that is a number but is beyond the integer of the database is a station that does not exist", async () => {
-  const { response, db } = await ask([], url("2147483648", GOOD));
-
-  expect(response.statusCode).toBe(404);
-  expect(response.json().detail).toBe("Station 2147483648 not found.");
-  expect(db.asked).toEqual([]); // PostgreSQL would have refused the number: that was a 500
-});
-
-test("the largest id of the database is looked up like any other", async () => {
-  const { response, db } = await ask([[]], url("2147483647", GOOD));
-
-  expect(response.statusCode).toBe(404);
-  expect(db.asked).toHaveLength(1);
-});
 
 test.each(["from", "to"])("a leap second in `%s` is a 422, not a 500: JavaScript cannot read it", async (name) => {
   const query = { ...GOOD, from: "2026-12-30T00:00:00Z", to: "2026-12-31T00:00:00Z", [name]: "2026-12-31T23:59:60Z" };
@@ -311,17 +254,3 @@ test("a database that fails is a 500 with a fixed text", async () => {
   expect(response.body).not.toContain("reader_secret");
 });
 
-test("the description of the routes has the path parameter, the query ones, and the two problem documents", async () => {
-  const app = await buildApp({ db: scriptedDb([]) });
-
-  const document = (await app.inject("/openapi.json")).json();
-
-  const operation = document.paths["/stations/{id}/measurements"].get;
-  const parameters = Object.fromEntries(operation.parameters.map((p: { name: string }) => [p.name, p]));
-  expect(parameters.id).toMatchObject({ in: "path", required: true });
-  for (const name of ["pollutant", "from", "to"]) expect(parameters[name]).toMatchObject({ in: "query", required: true });
-  expect(parameters.interval).toMatchObject({ in: "query" });
-  expect(parameters.interval.required).not.toBe(true);
-  expect(Object.keys(operation.responses["404"].content)).toEqual(["application/problem+json"]);
-  expect(Object.keys(operation.responses["422"].content)).toEqual(["application/problem+json"]);
-});

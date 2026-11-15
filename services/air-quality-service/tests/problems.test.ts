@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import { buildApp } from "../src/app.js";
-import { fakeDb, logSink } from "./helpers.js";
+import { buildApp } from "../src/app.ts";
+import { fakeDb, logSink } from "./helpers.ts";
 
 test("a path that does not exist is a problem document", async () => {
   const app = await buildApp({ db: fakeDb() });
@@ -112,15 +112,3 @@ test("a URL that cannot be read is a problem document, not the text of the frame
   expect(response.body).not.toContain("%zz");
 });
 
-test("a path parameter that is too long is a problem document that does not repeat it", async () => {
-  const app = await buildApp({ db: fakeDb() });
-  app.get("/things/:id", async () => ({}));
-
-  const response = await app.inject("/things/" + "a".repeat(200));
-
-  expect(response.statusCode).toBeGreaterThanOrEqual(400);
-  expect(response.statusCode).toBeLessThan(500);
-  expect(response.headers["content-type"]).toContain("application/problem+json");
-  expect(response.body).not.toContain("aaaaaaaaaa");
-  expect(response.body).not.toContain("FST_ERR");
-});

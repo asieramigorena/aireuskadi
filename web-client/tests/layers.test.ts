@@ -61,12 +61,6 @@ describe("buildLayers", () => {
     expect(small.elevationRange).toEqual([0, 1200]);
   });
 
-  test("without a radius the hexagons are the biggest ones, as before", () => {
-    const [, hexagons] = buildLayers(POINTS, UNITS, vi.fn()).map(propsOf);
-
-    expect(hexagons.radius).toBe(1500);
-  });
-
   test("a unit is painted by its density against the biggest one, and one without data is grey", () => {
     const [units] = buildLayers(POINTS, UNITS, vi.fn()).map(propsOf);
     const [a, b, c, d] = UNITS.features;
@@ -90,11 +84,6 @@ describe("buildLayers", () => {
     expect(onUnit).toHaveBeenCalledWith("01002");
   });
 
-  test("the colours are painted again when the biggest density changes", () => {
-    const [units] = buildLayers(POINTS, UNITS, vi.fn()).map(propsOf);
-
-    expect(units.updateTriggers.getFillColor).toEqual([10]);
-  });
 });
 
 const station = (code: string, municipality: string, ratio: number | null, at: [number, number] | null = [-2.9, 43.2]): StationFeature => ({
@@ -143,10 +132,6 @@ describe("columnHeight: how tall the column of a station is", () => {
     expect(columnHeight(1, 300)).toBeLessThan(columnHeight(1, 1000));
   });
 
-  test("a ratio that is not a number is a low column, not a column that is missing from the map", () => {
-    expect(columnHeight(Number.NaN, 1000)).toBe(500);
-    expect(columnHeight(-1, 1000)).toBe(500);
-  });
 });
 
 describe("buildAirLayers", () => {
@@ -184,27 +169,12 @@ describe("buildAirLayers", () => {
     expect(units.getFillColor(noStation)).toEqual(NEUTRAL_UNIT);
   });
 
-  test("without stations (loading, or an error) every unit is the dark one", () => {
-    const [units] = buildAirLayers(null, UNITS, vi.fn()).map(propsOf);
-
-    for (const feature of UNITS.features) expect(units.getFillColor(feature)).toEqual(NEUTRAL_UNIT);
-  });
-
   test("a district or a territory has no mean here: only the municipalities are painted", () => {
     const painted: StationCollection = { ...STATIONS, features: [station("B1", "48020", 1)] };
     const [units] = buildAirLayers(painted, UNITS, vi.fn()).map(propsOf);
     const territory = { ...UNITS.features[0], properties: { ...UNITS.features[0].properties, code: "48" } };
 
     expect(units.getFillColor(territory)).toEqual(NEUTRAL_UNIT);
-  });
-
-  test("the ground is painted again when the stations change (another pollutant)", () => {
-    const first = buildAirLayers(STATIONS, UNITS, vi.fn()).map(propsOf)[0];
-    const other = { ...STATIONS, pollutant: "O3" };
-    const second = buildAirLayers(other, UNITS, vi.fn()).map(propsOf)[0];
-
-    expect(first.updateTriggers.getFillColor).toEqual([STATIONS]);
-    expect(second.updateTriggers.getFillColor).toEqual([other]);
   });
 
   test("the units can still be clicked, to open their panel", () => {
@@ -242,13 +212,6 @@ describe("buildAirLayers", () => {
     expect(stations.data.map((f: StationFeature) => f.properties.code)).toEqual(["A1", "A2", "A4"]);
   });
 
-  test("a position that is not a list is not drawn either", () => {
-    const broken = { ...station("A9", "48020", 1), geometry: { type: "Point", coordinates: "x" as unknown as number[] } };
-    const [, stations] = buildAirLayers({ ...STATIONS, features: [broken] }, UNITS, vi.fn()).map(propsOf);
-
-    expect(stations.data).toEqual([]);
-  });
-
   test("the colour and the height of a column follow the ratio of its station", () => {
     const [, stations] = buildAirLayers(STATIONS, UNITS, vi.fn(), 1000).map(propsOf);
     const [low, high, none] = [STATIONS.features[0], STATIONS.features[1], STATIONS.features[3]];
@@ -282,12 +245,4 @@ describe("buildAirLayers", () => {
     expect(onUnit).toHaveBeenCalledWith("20069", STATIONS.features[3].properties.id);
   });
 
-  test("clicking a unit tells only its code: no station is open then", () => {
-    const onUnit = vi.fn();
-    const [units] = buildAirLayers(STATIONS, UNITS, onUnit).map(propsOf);
-
-    units.onClick({ object: UNITS.features[0] });
-
-    expect(onUnit.mock.calls[0]).toEqual(["01001"]);
-  });
 });

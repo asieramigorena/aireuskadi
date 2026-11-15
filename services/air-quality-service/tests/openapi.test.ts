@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import { buildApp } from "../src/app.js";
-import { fakeDb } from "./helpers.js";
+import { buildApp } from "../src/app.ts";
+import { fakeDb } from "./helpers.ts";
 
 test("the gateway can read the description of the routes at /openapi.json", async () => {
   const app = await buildApp({ db: fakeDb() });

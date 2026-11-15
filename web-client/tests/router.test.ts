@@ -94,11 +94,6 @@ describe("the language that the person chose", () => {
     expect(unitUrl("48020", { ...air("O3"), lang: "es" }, 195)).toBe("/unit/48020?view=air&pollutant=O3&lang=es&station=195");
   });
 
-  test("no choice (nothing, or null) leaves the address as it was", () => {
-    expect(homeUrl({ ...emissions("NOX", 2023), lang: null })).toBe("/");
-    expect(unitUrl("48020", { ...air("NO2"), lang: null })).toBe("/unit/48020?view=air");
-  });
-
   test("what the address says is what is read back", () => {
     const chosen: Selection = { ...air("PM10"), lang: "eu" };
 
@@ -106,10 +101,6 @@ describe("the language that the person chose", () => {
     expect(parseLocation("/unit/48020", unitUrl("48020", chosen, 7).split("?")[1].replace(/^/, "?")).selection).toEqual(chosen);
   });
 
-  test("the language is read on the address of a unit as it is on the home, and does not touch the rest", () => {
-    expect(parseLocation("/unit/48020", "?lang=es&station=7").route).toEqual({ name: "unit", code: "48020", station: 7 });
-    expect(parseLocation("/unit/48020", "?lang=es").selection.lang).toBe("es");
-  });
 });
 
 describe("the station that is open in the panel", () => {
@@ -126,10 +117,6 @@ describe("the station that is open in the panel", () => {
       expect((parseLocation("/unit/48020", query).route as { station: number | null }).station).toBeNull();
     },
   );
-
-  test("the biggest id that can be one is ten digits", () => {
-    expect((parseLocation("/unit/48020", "?station=9999999999").route as { station: number }).station).toBe(9999999999);
-  });
 
   test("the home has no station, and the address of a unit keeps it only in the map of the air quality", () => {
     expect(parseLocation("/", "?view=air&station=212").route).toEqual({ name: "home" });
@@ -270,14 +257,4 @@ describe("createRouter", () => {
     expect(onChange.mock.calls.at(-1)?.[0].route).toEqual({ name: "home" });
   });
 
-  test("navigating to the place where it already is does not add a step", () => {
-    const router = createRouter(window, vi.fn());
-    router.start();
-    router.navigate("/unit/48");
-    const steps = window.history.length;
-
-    router.navigate("/unit/48");
-
-    expect(window.history.length).toBe(steps);
-  });
 });

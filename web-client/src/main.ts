@@ -12,9 +12,10 @@ import { renderLegend } from "./legend";
 import { createMap } from "./map";
 import { applyPageTexts } from "./page";
 import { renderPanel, type PanelView } from "./panel";
-import { DEFAULT_SELECTION, createRouter, homeUrl, unitUrl, type Selection, type State } from "./router";
+import { createRouter, homeUrl, unitUrl, type Selection, type State } from "./router";
 import { maxDensity } from "./scale";
-import type { Level, Point, StationCollection, UnitCollection } from "./types";
+import type { BoundaryCollection, Level, Point, StationCollection, UnitCollection, UnitIndicators } from "./types";
+import { withIndicators } from "./units";
 import { insetFor } from "./view";
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -32,9 +33,11 @@ let units: UnitCollection | null = null;
 let hexRadius = HEXAGON_MAX_RADIUS;
 let legendShown = "";
 
-// The units of a level and a selection are asked for once: going back and forth between zooms
+// What is asked for once: the boundaries of each level (the same for every pollutant and year) and
+// the numbers of each level, pollutant and year. Going back and forth between zooms or pollutants
 // does not ask again.
-const unitCache = new Map<string, UnitCollection>();
+const boundaryCache = new Map<Level, BoundaryCollection>();
+const indicatorCache = new Map<string, UnitIndicators[]>();
 let mapLoad = new AbortController();
 let cardLoad = new AbortController();
 
@@ -149,18 +152,32 @@ async function loadUnits() {
 }
 
 async function cachedUnits(signal: AbortSignal): Promise<UnitCollection> {
-  // The map of the air quality needs the units only to draw them: it asks for them with the
-  // defaults of the emissions, so that the two maps share them and the pollutant of the air (NO2,
-  // which the emissions do not have) is never sent to the emissions service.
+  // The map of the air quality draws the units only as ground for its stations: it needs their
+  // boundaries and none of the numbers of the emissions. Only the municipalities have stations,
+  // so that is its ground at any zoom.
   const air = selection!.view === "air";
-  const asked = air ? DEFAULT_SELECTION : selection!;
-  // And only the municipalities have stations, so that is the ground of the air quality at any zoom.
   const wanted: Level = air ? "municipality" : level;
-  const key = `${wanted}|${asked.pollutant}|${asked.year}`;
-  const known = unitCache.get(key);
+  const [shapes, numbers] = await Promise.all([
+    cachedBoundaries(wanted, signal),
+    air ? Promise.resolve(null) : cachedIndicators(wanted, selection!, signal),
+  ]);
+  return withIndicators(shapes, numbers);
+}
+
+async function cachedBoundaries(wanted: Level, signal: AbortSignal): Promise<BoundaryCollection> {
+  const known = boundaryCache.get(wanted);
   if (known) return known;
-  const fresh = await api.units(wanted, asked, signal);
-  unitCache.set(key, fresh);
+  const fresh = await api.boundaries(wanted, signal);
+  boundaryCache.set(wanted, fresh);
+  return fresh;
+}
+
+async function cachedIndicators(wanted: Level, chosen: Selection, signal: AbortSignal): Promise<UnitIndicators[]> {
+  const key = `${wanted}|${chosen.pollutant}|${chosen.year}`;
+  const known = indicatorCache.get(key);
+  if (known) return known;
+  const fresh = await api.units(wanted, chosen, signal);
+  indicatorCache.set(key, fresh);
   return fresh;
 }
 
