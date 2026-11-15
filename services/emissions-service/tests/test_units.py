@@ -1,4 +1,6 @@
-"""GET /units: the units of a level as GeoJSON, with their indicators of a pollutant and a year."""
+"""GET /units: the indicators of a pollutant and a year of every unit of a level, without boundaries;
+and GET /units/boundaries: the boundaries of the units of a level, as GeoJSON, without indicators.
+The boundaries do not change with the pollutant or the year, so they travel once and not every time."""
 
 from datetime import date
 
@@ -12,6 +14,12 @@ def units(client, level="municipality", pollutant="TSTP", year=2023):
     response = client.get("/units", params={"level": level, "pollutant": pollutant, "year": year})
     assert response.status_code == 200, response.text
     # The database of the tests can hold units of other tests: only the ones of these tests.
+    return {unit["code"]: unit for unit in response.json() if unit["code"].startswith("99")}
+
+
+def boundaries(client, level="municipality"):
+    response = client.get("/units/boundaries", params={"level": level})
+    assert response.status_code == 200, response.text
     return {
         f["properties"]["code"]: f
         for f in response.json()["features"]
@@ -19,31 +27,15 @@ def units(client, level="municipality", pollutant="TSTP", year=2023):
     }
 
 
-def test_a_municipality_comes_with_its_simplified_boundary_and_its_indicators(
+def test_a_municipality_comes_with_its_indicators_and_without_its_boundary(
     client, add_pollutant, add_facility, refresh_indicators
 ):
     add_pollutant("TSTP", "Test pollutant P")
     add_facility("T0000000A", -1.95, 43.05, emissions=[("TSTP", 2023, "100000")])
     refresh_indicators()
 
-    response = client.get(
-        "/units", params={"level": "municipality", "pollutant": "TSTP", "year": 2023}
-    )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["type"] == "FeatureCollection"
-    feature = units(client)["99001"]
-    assert feature["type"] == "Feature"
-    # The smaller square, not the full boundary (-2.0 43.0, 0.1 wide), and [lon, lat].
-    assert feature["geometry"] == {
-        "type": "MultiPolygon",
-        "coordinates": [
-            [[[-1.99, 43.01], [-1.91, 43.01], [-1.91, 43.09], [-1.99, 43.09], [-1.99, 43.01]]]
-        ],
-    }
     # 100 t over 10 km2. Nothing measured: no ratio with the WHO guideline.
-    assert feature["properties"] == {
+    assert units(client)["99001"] == {
         "code": "99001",
         "name": "Testville",
         "declared_t": 100.0,
@@ -52,12 +44,67 @@ def test_a_municipality_comes_with_its_simplified_boundary_and_its_indicators(
     }
 
 
+def test_a_municipality_has_its_simplified_boundary_and_nothing_of_a_pollutant(
+    client, units_of_the_tests
+):
+    response = client.get("/units/boundaries", params={"level": "municipality"})
+
+    assert response.status_code == 200
+    assert response.json()["type"] == "FeatureCollection"
+    feature = boundaries(client)["99001"]
+    assert feature["type"] == "Feature"
+    # The smaller square, not the full boundary (-2.0 43.0, 0.1 wide), and [lon, lat].
+    assert feature["geometry"] == {
+        "type": "MultiPolygon",
+        "coordinates": [
+            [[[-1.99, 43.01], [-1.91, 43.01], [-1.91, 43.09], [-1.99, 43.09], [-1.99, 43.01]]]
+        ],
+    }
+    assert feature["properties"] == {"code": "99001", "name": "Testville"}
+
+
 def test_the_licence_of_the_boundaries_travels_with_them(client):
-    response = client.get(
-        "/units", params={"level": "municipality", "pollutant": "TSTP", "year": 2023}
-    )
+    response = client.get("/units/boundaries", params={"level": "municipality"})
 
     assert response.json()["attribution"] == ATTRIBUTION
+
+
+def test_the_boundaries_of_a_district_and_of_a_territory(client, units_of_the_tests):
+    assert boundaries(client, level="district")["9901"]["geometry"]["coordinates"] == [
+        [[[-2.04, 42.96], [-1.76, 42.96], [-1.76, 43.24], [-2.04, 43.24], [-2.04, 42.96]]]
+    ]
+    assert boundaries(client, level="territory")["99"]["geometry"]["coordinates"] == [
+        [[[-2.09, 42.91], [-1.71, 42.91], [-1.71, 43.29], [-2.09, 43.29], [-2.09, 42.91]]]
+    ]
+
+
+def test_the_boundaries_of_a_level_are_only_the_units_of_that_level(client, units_of_the_tests):
+    assert set(boundaries(client, level="territory")) == {"99"}
+    assert set(boundaries(client, level="district")) == {"9901", "9902"}
+    assert set(boundaries(client, level="municipality")) == {"99001", "99002", "99003"}
+
+
+@pytest.mark.parametrize("level", ["", "city", "Municipality", "99001"])
+def test_the_boundaries_of_a_level_that_does_not_exist_are_refused(client, level):
+    response = client.get("/units/boundaries", params={"level": level})
+
+    assert problem_loc(response) == [["query", "level"]]
+
+
+def test_the_boundaries_need_a_level(client):
+    assert problem_loc(client.get("/units/boundaries")) == [["query", "level"]]
+
+
+def test_the_indicators_carry_no_geometry(client, add_pollutant, add_facility, refresh_indicators):
+    add_pollutant("TSTP", "Test pollutant P")
+    add_facility("T0000000A", -1.95, 43.05, emissions=[("TSTP", 2023, "100000")])
+    refresh_indicators()
+
+    body = client.get("/units", params={"level": "district", "pollutant": "TSTP", "year": 2023})
+
+    assert all(
+        set(unit) == {"code", "name", "declared_t", "t_km2", "who_ratio"} for unit in body.json()
+    )
 
 
 def test_a_unit_without_data_for_that_pollutant_and_year_is_there_with_nulls(
@@ -68,7 +115,7 @@ def test_a_unit_without_data_for_that_pollutant_and_year_is_there_with_nulls(
     add_facility("T0000000A", -1.95, 43.05, emissions=[("TSTP", 2023, "100000")])
     refresh_indicators()
 
-    properties = units(client)["99002"]["properties"]
+    properties = units(client)["99002"]
 
     assert properties == {
         "code": "99002",
@@ -92,9 +139,9 @@ def test_the_data_of_another_pollutant_or_another_year_is_not_mixed_in(
     )
     refresh_indicators()
 
-    assert units(client)["99001"]["properties"]["declared_t"] == 100.0
-    assert units(client, year=2022)["99001"]["properties"]["declared_t"] == 7.0
-    assert units(client, pollutant="TSTQ")["99001"]["properties"]["declared_t"] == 5.0
+    assert units(client)["99001"]["declared_t"] == 100.0
+    assert units(client, year=2022)["99001"]["declared_t"] == 7.0
+    assert units(client, pollutant="TSTQ")["99001"]["declared_t"] == 5.0
 
 
 def test_a_district_adds_up_its_municipalities_and_is_not_the_mean_of_their_densities(
@@ -107,19 +154,14 @@ def test_a_district_adds_up_its_municipalities_and_is_not_the_mean_of_their_dens
     )
     refresh_indicators()
 
-    feature = units(client, level="district")["9901"]
-
     # 100 t + 30 t over 10 km2 + 30 km2. The mean of the densities (10 and 1) would be 5.5.
-    assert feature["properties"] == {
+    assert units(client, level="district")["9901"] == {
         "code": "9901",
         "name": "Test district",
         "declared_t": 130.0,
         "t_km2": 3.25,
         "who_ratio": None,
     }
-    assert feature["geometry"]["coordinates"] == [
-        [[[-2.04, 42.96], [-1.76, 42.96], [-1.76, 43.24], [-2.04, 43.24], [-2.04, 42.96]]]
-    ]
 
 
 def test_a_territory_adds_up_everything_it_holds_and_divides_by_all_its_area(
@@ -132,19 +174,14 @@ def test_a_territory_adds_up_everything_it_holds_and_divides_by_all_its_area(
     )
     refresh_indicators()
 
-    feature = units(client, level="territory")["99"]
-
     # 130 t over 10 + 30 + 60 km2: the municipality without data still has its area.
-    assert feature["properties"] == {
+    assert units(client, level="territory")["99"] == {
         "code": "99",
         "name": "Test territory",
         "declared_t": 130.0,
         "t_km2": 1.3,
         "who_ratio": None,
     }
-    assert feature["geometry"]["coordinates"] == [
-        [[[-2.09, 42.91], [-1.71, 42.91], [-1.71, 43.29], [-2.09, 43.29], [-2.09, 42.91]]]
-    ]
 
 
 def test_a_district_where_nothing_was_declared_has_nulls_and_not_zeros(
@@ -154,7 +191,7 @@ def test_a_district_where_nothing_was_declared_has_nulls_and_not_zeros(
     add_facility("T0000000A", -1.95, 43.05, emissions=[("TSTP", 2023, "100000")])
     refresh_indicators()
 
-    properties = units(client, level="district")["9902"]["properties"]
+    properties = units(client, level="district")["9902"]
 
     assert properties["declared_t"] is None
     assert properties["t_km2"] is None
@@ -182,7 +219,7 @@ def test_the_ratio_with_the_who_guideline_is_only_for_municipalities(
     refresh_indicators()
 
     ratio = {
-        level: units(client, level=level, pollutant="TSTW")[code]["properties"]["who_ratio"]
+        level: units(client, level=level, pollutant="TSTW")[code]["who_ratio"]
         for level, code in (("municipality", "99001"), ("district", "9901"), ("territory", "99"))
     }
 
@@ -275,7 +312,7 @@ def test_a_pollutant_that_was_only_measured_has_no_tonnes_and_not_zero(
     refresh_indicators()
 
     properties = {
-        level: units(client, level=level, pollutant="TSTW")[code]["properties"]
+        level: units(client, level=level, pollutant="TSTW")[code]
         for level, code in (("municipality", "99001"), ("district", "9901"), ("territory", "99"))
     }
 
