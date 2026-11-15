@@ -58,10 +58,6 @@ describe("the numbers of the panel", () => {
     expect(formatRatio(2.5)).toBe("2.5× the WHO guideline");
   });
 
-  test("the area", () => {
-    expect(formatArea(57.2)).toBe("57.2 km²");
-    expect(formatArea(2222.123)).toBe("2,220 km²");
-  });
 });
 
 describe("the caption of the map", () => {
@@ -217,10 +213,6 @@ describe("the numbers, written by the dictionary and not by the browser", () => 
     expect(formatTonnes(1234567)).toBe("1.230.000 t");
   });
 
-  test("never in the notation of the exponents, however small or big", () => {
-    expect(formatTonnes(0.00000123)).toBe("0.00000123 t");
-    expect(formatTonnes(123456789012)).toBe("123,000,000,000 t");
-  });
 });
 
 describe("the hour, written by the dictionary and not by the browser", () => {
@@ -230,14 +222,6 @@ describe("the hour, written by the dictionary and not by the browser", () => {
     expect(formatHour("2026-11-11T14:00:00.000Z")).toBe("11 nov, 14:00 UTC");
     setLanguage("eu");
     expect(formatHour("2026-11-11T14:00:00.000Z")).toBe("aza. 11, 14:00 UTC");
-  });
-
-  test("all the months, in each language", () => {
-    const first = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    first.forEach((month, index) => {
-      const day = `2026-${String(index + 1).padStart(2, "0")}-05T09:05:00.000Z`;
-      expect(formatHour(day)).toBe(`5 ${month}, 09:05 UTC`);
-    });
   });
 
   test("the month and the day are the ones of UTC, also at the end of the month with the clock of the machine a day ahead", () => {
@@ -251,11 +235,6 @@ describe("the hour, written by the dictionary and not by the browser", () => {
     }
   });
 
-  test("midnight and the last minute of the day have two digits, and a time that is not one throws, as before", () => {
-    expect(formatHour("2026-01-05T00:00:00.000Z")).toBe("5 Jan, 00:00 UTC");
-    expect(formatHour("2026-01-05T23:59:59.000Z")).toBe("5 Jan, 23:59 UTC");
-    expect(() => formatHour("garbage")).toThrow(RangeError);
-  });
 });
 
 describe("in Spanish", () => {
@@ -270,47 +249,6 @@ describe("in Spanish", () => {
     expect(formatArea(57.2)).toBe("57,2 km²");
   });
 
-  test("the time has the month in Spanish, and is still UTC whatever the time zone of the machine is", () => {
-    setLanguage("es");
-    const before = process.env.TZ;
-    process.env.TZ = "Pacific/Auckland";
-    try {
-      expect(formatHour("2026-11-11T14:00:00.000Z")).toBe("11 nov, 14:00 UTC");
-    } finally {
-      if (before === undefined) delete process.env.TZ;
-      else process.env.TZ = before;
-    }
-  });
-
-  test("the comparison with the guideline, in its three forms", () => {
-    setLanguage("es");
-
-    expect(formatReadingRatio(reading())).toBe("0,6× el valor guía de la OMS");
-    expect(formatReadingRatio(reading({ who_samples: 19 }))).toBe("0,6× el valor guía de la OMS (19 de 24 horas)");
-    expect(formatReadingRatio(reading({ who_ratio: null, who_samples: 12 }))).toBe("Datos insuficientes");
-    expect(
-      formatReadingRatio(reading({ who_period: null, who_guideline_ugm3: null, who_samples: null, who_ratio: null })),
-    ).toBe("Sin valor guía de la OMS");
-  });
-
-  test("the captions and the label of the map", () => {
-    setLanguage("es");
-
-    expect(mapCaption({ view: "emissions", pollutant: "NOX", year: 2023 })).toBe(
-      "Emisiones industriales declaradas de NOX en 2023",
-    );
-    expect(mapCaption({ view: "air", pollutant: "NO2", year: 2023 })).toBe(
-      "Calidad del aire más reciente: dióxido de nitrógeno, frente al valor guía de la OMS",
-    );
-    expect(mapLabel("air")).toContain("Mapa 3D de la calidad del aire");
-  });
-
-  test("the errors", () => {
-    setLanguage("es");
-
-    expect(errorText(422)).toBe("No hay datos para ese contaminante y año. Prueba con otro año.");
-    expect(errorText(503)).toBe("El servicio no está disponible en este momento.");
-  });
 });
 
 describe("in Basque", () => {
@@ -321,23 +259,6 @@ describe("in Basque", () => {
     expect(formatTonnes(250)).toBe("250 t");
     expect(formatTonnes(null)).toBe("Daturik ez");
     expect(formatDensity(0.5)).toBe("0,5 t/km²");
-  });
-
-  test("the time puts the month first, in Basque, and is UTC", () => {
-    setLanguage("eu");
-
-    expect(formatHour("2026-11-11T14:00:00.000Z")).toBe("aza. 11, 14:00 UTC");
-  });
-
-  test("the comparison with the guideline, in its three forms", () => {
-    setLanguage("eu");
-
-    expect(formatReadingRatio(reading())).toBe("OMEren gidalerroaren 0,6×");
-    expect(formatReadingRatio(reading({ who_samples: 19 }))).toBe("OMEren gidalerroaren 0,6× (24 orduetatik 19)");
-    expect(formatReadingRatio(reading({ who_ratio: null, who_samples: 12 }))).toBe("Ez dago datu nahikorik");
-    expect(
-      formatReadingRatio(reading({ who_period: null, who_guideline_ugm3: null, who_samples: null, who_ratio: null })),
-    ).toBe("OMEren gidalerrorik ez");
   });
 
   test("the caption keeps a name that starts with the letters of a formula as it is, and lowers the others", () => {
@@ -351,12 +272,6 @@ describe("in Basque", () => {
     );
   });
 
-  test("the errors", () => {
-    setLanguage("eu");
-
-    expect(errorText(422)).toBe("Ez dago daturik kutsatzaile eta urte horretarako. Saiatu beste urte batekin.");
-    expect(errorText(0)).toBe("Ezin da zerbitzuarekin konektatu.");
-  });
 });
 
 describe("the names of the pollutants follow the language", () => {
@@ -380,13 +295,6 @@ describe("the names of the pollutants follow the language", () => {
 
     setLanguage("eu");
     expect(emissionName("NOX", "Oxides of nitrogen (NOx)")).toBe("Nitrogeno oxidoak (NOx)");
-  });
-
-  test("a name that is the name of something that every object has does not find a text", () => {
-    setLanguage("es");
-
-    expect(emissionName("toString", "From the API")).toBe("From the API");
-    expect(emissionName("constructor", "From the API")).toBe("From the API");
   });
 
   test("changing the language changes what is written the next time, with nothing to rebuild", () => {

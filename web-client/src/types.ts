@@ -21,6 +21,22 @@ export interface UnitFeature {
   properties: UnitProperties;
 }
 
+/** What GET /units gives for one unit: its numbers for a pollutant and a year, without boundary. */
+export type UnitIndicators = UnitProperties;
+
+/** What GET /units/boundaries gives: the boundaries of a level, the same for every pollutant. */
+export interface BoundaryCollection {
+  type: "FeatureCollection";
+  /** The credit that the licence of the boundaries asks for. */
+  attribution: string;
+  features: {
+    type: "Feature";
+    geometry: UnitFeature["geometry"];
+    properties: { code: string; name: string };
+  }[];
+}
+
+/** The units that the map draws: the boundaries with the indicators put in (see units.ts). */
 export interface UnitCollection {
   type: "FeatureCollection";
   /** The credit that the licence of the boundaries asks for. */
