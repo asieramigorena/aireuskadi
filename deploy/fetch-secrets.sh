@@ -25,6 +25,8 @@ IMAGE="ghcr.io/oracle/oci-cli:20261111@sha256:2127c2f50ee1353fa78cbf538ab91ffacc
 SECRETS=(
   "POSTGRES_PASSWORD aireuskadi-postgres-password required"
   "POSTGRES_READER_PASSWORD aireuskadi-reader-password required"
+  "POSTGRES_AUTH_PASSWORD aireuskadi-auth-password required"
+  "JWT_SECRET aireuskadi-jwt-secret required"
   "TS_AUTHKEY aireuskadi-tailscale-authkey optional"
 )
 

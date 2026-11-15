@@ -18,6 +18,8 @@ VAULT = "ocid1.vault.oc1.eu-madrid-1.exampleexample.abcdef"
 # Long enough that they cannot appear by chance in an output.
 OWNER = "Owner-Password_0123456789abcdefghij"
 READER = "Reader-Password_0123456789abcdefghij"
+AUTH = "Auth-Password_0123456789abcdefghij"
+JWT = "Jwt-Secret_0123456789abcdefghijklmnopqrstuvwxyz"
 # The shape of a one-time key of Tailscale: letters, digits and "-".
 TAILSCALE = "tskey-auth-kAbC123CNTRL-0123456789abcdefghijklmnopqrstuvwxyz"
 
@@ -50,6 +52,8 @@ def machine(tmp_path):
     secrets.mkdir()
     (secrets / "aireuskadi-postgres-password").write_text(OWNER)
     (secrets / "aireuskadi-reader-password").write_text(READER)
+    (secrets / "aireuskadi-auth-password").write_text(AUTH)
+    (secrets / "aireuskadi-jwt-secret").write_text(JWT)
     docker = tmp_path / "docker"
     docker.write_text(FAKE_DOCKER)
     docker.chmod(0o755)
@@ -89,7 +93,12 @@ def test_the_two_passwords_are_written_with_the_names_of_the_variables_of_the_co
     result = run(machine)
 
     assert result.returncode == 0, result.stderr
-    assert written(machine) == {"POSTGRES_PASSWORD": OWNER, "POSTGRES_READER_PASSWORD": READER}
+    assert written(machine) == {
+        "POSTGRES_PASSWORD": OWNER,
+        "POSTGRES_READER_PASSWORD": READER,
+        "POSTGRES_AUTH_PASSWORD": AUTH,
+        "JWT_SECRET": JWT,
+    }
 
 
 def test_the_file_and_its_folder_are_only_for_the_owner(machine):
@@ -127,8 +136,8 @@ def test_nothing_of_the_passwords_is_printed(machine):
     result = run(machine)
 
     for text in (result.stdout, result.stderr):
-        assert OWNER not in text
-        assert READER not in text
+        for secret in (OWNER, READER, AUTH, JWT):
+            assert secret not in text
 
 
 def test_the_vault_is_asked_with_the_identity_of_the_machine_and_by_the_name_of_each_secret(
@@ -140,6 +149,8 @@ def test_the_vault_is_asked_with_the_identity_of_the_machine_and_by_the_name_of_
     names = [
         "aireuskadi-postgres-password",
         "aireuskadi-reader-password",
+        "aireuskadi-auth-password",
+        "aireuskadi-jwt-secret",
         "aireuskadi-tailscale-authkey",
     ]
     assert len(calls) == len(names)
@@ -251,6 +262,8 @@ def test_the_key_of_the_tunnel_is_written_too_when_there_is_one(machine):
     assert written(machine) == {
         "POSTGRES_PASSWORD": OWNER,
         "POSTGRES_READER_PASSWORD": READER,
+        "POSTGRES_AUTH_PASSWORD": AUTH,
+        "JWT_SECRET": JWT,
         "TS_AUTHKEY": TAILSCALE,
     }
     assert TAILSCALE not in result.stdout + result.stderr
@@ -263,7 +276,12 @@ def test_without_the_key_of_the_tunnel_the_rest_is_written_and_it_is_said_that_t
     result = run(machine)
 
     assert result.returncode == 0, result.stderr
-    assert written(machine) == {"POSTGRES_PASSWORD": OWNER, "POSTGRES_READER_PASSWORD": READER}
+    assert written(machine) == {
+        "POSTGRES_PASSWORD": OWNER,
+        "POSTGRES_READER_PASSWORD": READER,
+        "POSTGRES_AUTH_PASSWORD": AUTH,
+        "JWT_SECRET": JWT,
+    }
     assert "aireuskadi-tailscale-authkey" in result.stderr
 
 
@@ -287,3 +305,12 @@ def test_a_key_of_the_tunnel_that_could_add_lines_or_commands_to_the_file_is_ref
     assert result.returncode != 0
     assert not machine["out"].exists()
     assert "other" not in result.stderr
+
+
+def test_the_secret_of_the_jwt_is_required_like_the_passwords(machine):
+    (machine["secrets"] / "aireuskadi-jwt-secret").unlink()
+
+    result = run(machine)
+
+    assert result.returncode != 0
+    assert not machine["out"].exists()
