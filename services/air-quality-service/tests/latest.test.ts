@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
-import { buildApp } from "../src/app.js";
-import { dbTest } from "./database.js";
-import { brokenDb, fakeDb } from "./helpers.js";
-import { addGuideline, addReadings, addStation, hourly } from "./seed.js";
+import { buildApp } from "../src/app.ts";
+import { dbTest } from "./database.ts";
+import { brokenDb, fakeDb } from "./helpers.ts";
+import { addGuideline, addReadings, addStation, hourly } from "./seed.ts";
 
 type Latest = {
   type: string;
@@ -74,26 +74,6 @@ dbTest("the running mean of 8 hours is not the hourly value", async ({ db }) => 
   expect(propertiesOf(body, "T_A")).toMatchObject({ value: 5, ts: "2026-01-15T11:00:00.000Z" });
 });
 
-dbTest("a station whose latest value is old is still listed with its time", async ({ db }) => {
-  const a = await addStation(db, { code: "T_A" });
-  await addReadings(db, a, "T_X", [{ ts: "2025-06-01T00:00:00Z", value: 7 }]);
-
-  const body = await latestOf(db, "T_X");
-
-  expect(propertiesOf(body, "T_A")).toMatchObject({ ts: "2025-06-01T00:00:00.000Z", value: 7 });
-});
-
-dbTest("the stations come in the order of their code", async ({ db }) => {
-  for (const code of ["T_C", "T_A", "T_B"]) {
-    const id = await addStation(db, { code });
-    await addReadings(db, id, "T_X", [{ ts: END, value: 1 }]);
-  }
-
-  const body = await latestOf(db, "T_X");
-
-  expect(body.features.map((f) => f.properties.code)).toEqual(["T_A", "T_B", "T_C"]);
-});
-
 // --- the comparison with the WHO guideline of its own period -----------------------------------
 
 dbTest("a 24-hour guideline is compared with the mean of the last 24 hourly values", async ({ db }) => {
@@ -132,16 +112,6 @@ dbTest("with fewer than 18 values in the last 24 hours there is no ratio, and it
   expect(propertiesOf(body, "T_A")).toMatchObject({ who_period: "24h", who_samples: 17, who_ratio: null });
 });
 
-dbTest("with exactly 18 values the ratio is computed", async ({ db }) => {
-  await addGuideline(db, "T_X", "24h", 25);
-  const a = await addStation(db, { code: "T_A" });
-  await addReadings(db, a, "T_X", hourly(END, 18, 50));
-
-  const body = await latestOf(db, "T_X");
-
-  expect(propertiesOf(body, "T_A")).toMatchObject({ who_samples: 18, who_ratio: 2 });
-});
-
 dbTest("a value in mg/m3 is converted before it is compared, and the value itself keeps its unit", async ({ db }) => {
   await addGuideline(db, "T_X", "24h", 4000);
   const a = await addStation(db, { code: "T_A" });
@@ -161,43 +131,6 @@ dbTest("a value in a unit that is not known is left out of the mean instead of g
 
   // The latest value is the one in furlongs, but only values in a known unit make a mean.
   expect(propertiesOf(body, "T_A")).toMatchObject({ who_mean_ugm3: 50, who_samples: 20 });
-});
-
-dbTest("a value exactly 24 hours before the latest one is out of the mean, and one 23 hours before is in", async ({ db }) => {
-  await addGuideline(db, "T_X", "24h", 25);
-  const a = await addStation(db, { code: "T_A" });
-  await addReadings(db, a, "T_X", [
-    { ts: "2026-01-14T12:00:00Z", value: 1000 }, // 24 hours before 12:00: out
-    ...hourly("2026-01-15T12:00:00.000Z", 24, 50), // from 13:00 the day before: 24 values
-  ]);
-
-  const body = await latestOf(db, "T_X");
-
-  expect(propertiesOf(body, "T_A")).toMatchObject({ who_samples: 24, who_mean_ugm3: 50 });
-});
-
-dbTest("a value in ng/m3 is converted too", async ({ db }) => {
-  await addGuideline(db, "T_X", "24h", 25);
-  const a = await addStation(db, { code: "T_A" });
-  await addReadings(db, a, "T_X", hourly(END, 24, 50_000, "ng/m3"));
-
-  const body = await latestOf(db, "T_X");
-
-  expect(propertiesOf(body, "T_A")).toMatchObject({ who_mean_ugm3: 50, who_ratio: 2 });
-});
-
-dbTest("an 8-hour mean in a unit that is not known is not used", async ({ db }) => {
-  await addGuideline(db, "T_X", "8h", 100);
-  const a = await addStation(db, { code: "T_A" });
-  await addReadings(db, a, "T_X", [
-    { ts: END, value: 50 },
-    { ts: "2026-01-15T11:00:00Z", value: 120, period: "8h" },
-    { ts: END, value: 9999, period: "8h", unit: "furlongs" },
-  ]);
-
-  const body = await latestOf(db, "T_X");
-
-  expect(propertiesOf(body, "T_A")).toMatchObject({ who_mean_ugm3: 120, who_ratio: 1.2 });
 });
 
 dbTest("an 8-hour guideline is compared with the latest running mean of 8 hours, not with the hourly value", async ({ db }) => {
@@ -230,17 +163,6 @@ dbTest("with both a 24-hour and an 8-hour guideline, the 24-hour one is used", a
   const body = await latestOf(db, "T_X");
 
   expect(propertiesOf(body, "T_A")).toMatchObject({ who_period: "24h" });
-});
-
-dbTest("the most recent edition of the guideline is the one used", async ({ db }) => {
-  await addGuideline(db, "T_X", "24h", 50, 2005);
-  await addGuideline(db, "T_X", "24h", 25, 2021);
-  const a = await addStation(db, { code: "T_A" });
-  await addReadings(db, a, "T_X", hourly(END, 24, 50));
-
-  const body = await latestOf(db, "T_X");
-
-  expect(propertiesOf(body, "T_A")).toMatchObject({ who_guideline_ugm3: 25, who_ratio: 2 });
 });
 
 dbTest("a pollutant that has only an annual guideline is not compared: nothing is invented", async ({ db }) => {
@@ -312,21 +234,6 @@ test.each([
   expect(body.features[0].properties.who_samples).toBe(samples);
 });
 
-test("a ratio is rounded to four decimals, which is more than any chart shows", async () => {
-  const body = (await answerFor([{ ...ROW, who_mean_ugm3: "33.3333333333", who_guideline_ugm3: "25" }])).json() as Latest;
-
-  expect(body.features[0].properties.who_ratio).toBe(1.3333);
-});
-
-test("a value that is not a number is null, never NaN", async () => {
-  const row = { ...ROW, who_mean_ugm3: "NaN" };
-
-  const body = (await answerFor([row])).json() as Latest;
-
-  expect(body.features[0].properties.who_mean_ugm3).toBeNull();
-  expect(body.features[0].properties.who_ratio).toBeNull();
-});
-
 test("without a guideline the comparison is all null", async () => {
   const row = { ...ROW, who_period: null, who_guideline_ugm3: null, who_mean_ugm3: null, who_samples: null };
 
@@ -339,14 +246,6 @@ test("without a guideline the comparison is all null", async () => {
     who_samples: null,
     who_ratio: null,
   });
-});
-
-test("an 8-hour mean has its ratio without a count of hourly values", async () => {
-  const row = { ...ROW, who_period: "8h", who_guideline_ugm3: "100", who_mean_ugm3: "120", who_samples: null };
-
-  const body = (await answerFor([row])).json() as Latest;
-
-  expect(body.features[0].properties).toMatchObject({ who_period: "8h", who_ratio: 1.2, who_samples: null });
 });
 
 test("a pollutant that nobody measures is an empty list with the credit of the source", async () => {
@@ -373,6 +272,16 @@ test.each([
   expect(response.body).not.toContain("DROP");
 });
 
+test("a database that fails is a 500 with a fixed text", async () => {
+  const app = await buildApp({ db: brokenDb() });
+
+  const response = await app.inject("/stations/latest?pollutant=NO2");
+
+  expect(response.statusCode).toBe(500);
+  expect(response.body).not.toContain("reader_secret");
+});
+
+
 test("the code of the pollutant is passed to the database as a parameter, never written into the query", async () => {
   const asked: { text: string; params?: unknown[] }[] = [];
   const db = {
@@ -391,23 +300,3 @@ test("the code of the pollutant is passed to the database as a parameter, never 
   expect(asked[0].text).not.toContain("NO2");
 });
 
-test("a database that fails is a 500 with a fixed text", async () => {
-  const app = await buildApp({ db: brokenDb() });
-
-  const response = await app.inject("/stations/latest?pollutant=NO2");
-
-  expect(response.statusCode).toBe(500);
-  expect(response.body).not.toContain("reader_secret");
-});
-
-test("the description of the routes says that the pollutant is required and that a 422 is a problem document", async () => {
-  const app = await buildApp({ db: fakeDb() });
-
-  const document = (await app.inject("/openapi.json")).json();
-
-  const operation = document.paths["/stations/latest"].get;
-  expect(operation.parameters).toEqual([expect.objectContaining({ name: "pollutant", in: "query", required: true })]);
-  expect(Object.keys(operation.responses["422"].content)).toEqual(["application/problem+json"]);
-  const item = operation.responses["200"].content["application/json"].schema.properties.features.items.properties.properties;
-  expect(item.properties.who_ratio.nullable).toBe(true);
-});

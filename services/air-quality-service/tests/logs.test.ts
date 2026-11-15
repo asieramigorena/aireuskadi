@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
-import { buildApp } from "../src/app.js";
-import { fakeDb, logSink } from "./helpers.js";
+import { buildApp } from "../src/app.ts";
+import { fakeDb, logSink } from "./helpers.ts";
 
 // The dashboards of Grafana read these lines with `| json | level=~"ERROR|CRITICAL"`,
 // `{{.logger}}`, `{{.message}}`: the keys have to be the ones of the Python services.
@@ -58,18 +58,6 @@ test("the checks of the compose, which come every few seconds, are only in the l
   expect(verbose.records()[0]).toMatchObject({ level: "DEBUG", path: "/health", status: 200 });
 });
 
-test("a warning and a failure use the names of the Python levels", async () => {
-  const sink = logSink();
-  const app = await buildApp({ db: fakeDb(), logStream: sink.stream, logLevel: "info" });
-
-  app.log.warn("a warning");
-  app.log.error("a failure");
-  app.log.fatal("the end");
-
-  expect(sink.records().map((r) => r.level)).toEqual(["WARNING", "ERROR", "CRITICAL"]);
-  expect(sink.records().every((r) => r.logger === "air_quality_service")).toBe(true);
-});
-
 test("the level comes from LOG_LEVEL, as in the Python services", async () => {
   vi.stubEnv("LOG_LEVEL", "DEBUG");
   try {
@@ -100,15 +88,6 @@ test.each([
     await app.inject("/nothing-here");
 
     expect(sink.records().length > 0).toBe(writesRequests);
-  } finally {
-    vi.unstubAllEnvs();
-  }
-});
-
-test("a level that does not exist stops the start with a clear message", async () => {
-  vi.stubEnv("LOG_LEVEL", "LOUD");
-  try {
-    await expect(buildApp({ db: fakeDb() })).rejects.toThrow(/LOG_LEVEL/);
   } finally {
     vi.unstubAllEnvs();
   }

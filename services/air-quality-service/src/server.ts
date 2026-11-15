@@ -1,6 +1,6 @@
 // Entry point of the container: reads the settings from the environment, opens the pool and listens.
-import { buildApp } from "./app.js";
-import { createPool } from "./db.js";
+import { buildApp } from "./app.ts";
+import { createPool } from "./db.ts";
 
 const url = process.env.DATABASE_URL;
 if (!url) {

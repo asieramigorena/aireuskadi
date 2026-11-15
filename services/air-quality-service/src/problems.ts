@@ -1,8 +1,10 @@
-// Errors as application/problem+json (RFC 9457), with the members of the Python services:
-// type, title, status, detail (and `errors` for invalid parameters).
+// Errors as application/problem+json (RFC 9457), with the same members as the Python services:
+// type, title, status, detail, and `errors` for the parameters that are wrong.
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import { STATUS_CODES } from "node:http";
-import { MAX_EXCEPTION, clean } from "./logging.js";
+import { clean } from "./logging.ts";
+
+const INVALID = "The request has invalid or missing parameters.";
 
 export function problem(reply: FastifyReply, status: number, detail: string, extra: object = {}) {
   return reply
@@ -11,31 +13,26 @@ export function problem(reply: FastifyReply, status: number, detail: string, ext
     .send({ type: "about:blank", title: STATUS_CODES[status] ?? "Error", status, detail, ...extra });
 }
 
-// Where each part of the request is called in the errors, as FastAPI calls it.
-const WHERE: Record<string, string> = {
-  querystring: "query",
-  params: "path",
-  headers: "header",
-  body: "body",
-};
-
-function invalidRequest(error: FastifyError, reply: FastifyReply) {
-  const where = WHERE[error.validationContext ?? ""] ?? "query";
-  const errors = (error.validation ?? []).map((e) => {
-    const params = e.params as { missingProperty?: string } | undefined;
-    const name = (e.instancePath || "").split("/").filter(Boolean);
-    if (e.keyword === "required" && params?.missingProperty) name.push(params.missingProperty);
-    return { loc: [where, ...name], msg: e.message ?? "invalid", type: e.keyword };
-  });
-  return problem(reply, 422, "The request has invalid or missing parameters.", { errors });
+/** A 422 for a rule that a JSON schema cannot say (a range that is too long). */
+export function invalidParameter(reply: FastifyReply, loc: string[], msg: string, type: string) {
+  return problem(reply, 422, INVALID, { errors: [{ loc, msg, type }] });
 }
 
 export function errorHandler(error: FastifyError, request: FastifyRequest, reply: FastifyReply) {
-  if (error.validation) return invalidRequest(error, reply);
+  if (error.validation) {
+    // As FastAPI says it: ["query", "pollutant"], ["path", "code"].
+    const where = error.validationContext === "params" ? "path" : "query";
+    const errors = error.validation.map((e) => {
+      const missing = (e.params as { missingProperty?: string }).missingProperty;
+      const name = e.instancePath.replace("/", "") || missing || "";
+      return { loc: [where, name], msg: e.message ?? "invalid", type: e.keyword };
+    });
+    return problem(reply, 422, INVALID, { errors });
+  }
   const status = error.statusCode ?? 500;
   if (status < 500) return problem(reply, status, STATUS_CODES[status] ?? "Error");
-  // The reason is only for the log: a message can name a table, a user or an address.
-  request.log.error({ exception: clean(error.stack ?? String(error), MAX_EXCEPTION) }, "request failed");
+  // The reason only goes to the log: a message can name a table, a user or an address.
+  request.log.error({ exception: clean(error.stack ?? String(error)) }, "request failed");
   return problem(reply, 500, "The service failed to answer.");
 }
 
@@ -43,65 +40,32 @@ export function notFoundHandler(_request: FastifyRequest, reply: FastifyReply) {
   return problem(reply, 404, "Not Found");
 }
 
-// Errors that Fastify raises before the routes and the handlers (a URL that cannot be read, a
-// parameter that is too long): left alone it answers with its own JSON, that repeats the path and
-// names the framework.
+// Errors of Fastify before the routes (a URL that cannot be read): its own answer would repeat the
+// path and name the framework.
 export function frameworkErrors(error: FastifyError, _request: unknown, reply: FastifyReply) {
   const status = error.statusCode && error.statusCode < 500 ? error.statusCode : 400;
   return problem(reply, status, STATUS_CODES[status] ?? "Error");
 }
 
-// How the OpenAPI document describes the errors: as problem documents, which is what is sent.
-const problemMembers = {
-  type: { type: "string" },
-  title: { type: "string" },
-  status: { type: "integer" },
-  detail: { type: "string" },
-} as const;
-
-const validationProblem = {
+// How the OpenAPI document describes the errors of a route.
+const problemSchema = {
   type: "object",
-  required: ["type", "title", "status", "detail", "errors"],
   properties: {
-    ...problemMembers,
-    errors: {
-      type: "array",
-      items: {
-        type: "object",
-        required: ["loc", "msg", "type"],
-        properties: {
-          loc: { type: "array", items: { type: ["string", "integer"] } },
-          msg: { type: "string" },
-          type: { type: "string" },
-        },
-      },
-    },
+    type: { type: "string" },
+    title: { type: "string" },
+    status: { type: "integer" },
+    detail: { type: "string" },
+    errors: { type: "array" },
   },
 } as const;
 
-/** For the routes that take parameters: the 422 that they can answer. */
 export const INVALID_REQUEST = {
-  422: {
-    description: "The request has invalid or missing parameters.",
-    content: { "application/problem+json": { schema: validationProblem } },
-  },
+  422: { description: INVALID, content: { "application/problem+json": { schema: problemSchema } } },
 } as const;
 
-const notFoundProblem = {
-  type: "object",
-  required: ["type", "title", "status", "detail"],
-  properties: problemMembers,
-} as const;
-
-/** For the routes that look something up: the 404 that they can answer. */
 export const NOT_FOUND = {
   404: {
     description: "What was asked for does not exist.",
-    content: { "application/problem+json": { schema: notFoundProblem } },
+    content: { "application/problem+json": { schema: problemSchema } },
   },
 } as const;
-
-/** A 422 for a rule that a JSON schema cannot say (a range that is too long): same body as the others. */
-export function invalidParameter(reply: FastifyReply, loc: (string | number)[], msg: string, type: string) {
-  return problem(reply, 422, "The request has invalid or missing parameters.", { errors: [{ loc, msg, type }] });
-}

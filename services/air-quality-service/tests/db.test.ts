@@ -17,7 +17,7 @@ vi.mock("pg", async () => {
   return { default: { Pool } };
 });
 
-const { createPool } = await import("../src/db.js");
+const { createPool } = await import("../src/db.ts");
 
 test("the pool is small, gives up waiting after 5 seconds and the server cuts a query at 5 seconds", () => {
   createPool("postgresql://reader:pw@db:5432/aireuskadi", () => undefined);

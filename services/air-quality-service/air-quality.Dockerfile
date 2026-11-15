@@ -5,27 +5,20 @@
 # of the repository as context. This service needs nothing outside its folder: it uses the root only
 # to be built the same way as the other services.
 
-# Stage 1: compile the TypeScript. The tests and the tools to compile stay in this stage.
-FROM node:22-slim AS build
-WORKDIR /app
-COPY services/air-quality-service/package.json services/air-quality-service/package-lock.json ./
-# --ignore-scripts: no package runs code while it is installed.
-RUN npm ci --ignore-scripts
-COPY services/air-quality-service/tsconfig.json services/air-quality-service/tsconfig.build.json ./
-COPY services/air-quality-service/src src
-RUN npm run build
-
-# Stage 2: only what runs. No compiler, no test tools.
+# Node runs the TypeScript as it is: it erases the types when it loads a file (type stripping, on by
+# default since Node 22.18), so there is nothing to compile and one stage is enough. The types are
+# checked in the CI (npm run lint), not here. Only the packages that run: no compiler, no test tools.
 FROM node:22-slim
 ENV NODE_ENV=production
 WORKDIR /app
 COPY services/air-quality-service/package.json services/air-quality-service/package-lock.json ./
+# --ignore-scripts: no package runs code while it is installed.
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
-COPY --from=build /app/dist dist
+COPY services/air-quality-service/src src
 
 # The image of Node brings this user: the service does not run as root.
 USER node
 EXPOSE 8000
 # The log comes from the application (JSON). It listens on every interface of the container, but the
 # compose publishes no port: only the other containers of the internal network can reach it.
-CMD ["node", "dist/server.js"]
+CMD ["node", "src/server.ts"]

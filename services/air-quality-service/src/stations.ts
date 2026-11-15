@@ -1,6 +1,6 @@
 // GET /stations: the stations of the air quality network as GeoJSON points.
 import type { FastifyInstance } from "fastify";
-import type { Db } from "./db.js";
+import type { Db } from "./db.ts";
 
 // The licence of Open Data Euskadi (CC BY 4.0) asks to credit the source. The text goes with the
 // data, as in the emissions service, so whoever uses the data receives it together with them.

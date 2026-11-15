@@ -1,10 +1,10 @@
 // GET /units/{code}/exposure: how the air that a municipality breathes compares with the WHO annual
 // guideline, from what its stations measured in a year.
 import type { FastifyInstance } from "fastify";
-import type { Db } from "./db.js";
-import { INVALID_REQUEST, NOT_FOUND, invalidParameter, problem } from "./problems.js";
-import { ATTRIBUTION } from "./stations.js";
-import { KNOWN_UNIT, MIN_COVERAGE, TO_UGM3, UNITS, UNIT_CODE } from "./units.js";
+import type { Db } from "./db.ts";
+import { INVALID_REQUEST, NOT_FOUND, invalidParameter, problem } from "./problems.ts";
+import { ATTRIBUTION } from "./stations.ts";
+import { KNOWN_UNIT, MIN_COVERAGE, TO_UGM3, UNITS, UNIT_CODE } from "./units.ts";
 
 // The mean is the one of unit_indicator (which the map uses): the average of every hourly value
 // of the stations of the municipality, each in ug/m3 with its own unit. The coverage is how many
