@@ -1,5 +1,6 @@
-"""Fixtures. The two services (emissions and air quality) are fakes that answer through
-httpx.MockTransport: they are the boundary of the gateway, and they keep what the gateway sent."""
+"""Fixtures. The services behind the gateway (emissions, air quality, auth and Grafana) are fakes
+that answer through httpx.MockTransport: they are the boundary of the gateway, and they keep what
+the gateway sent."""
 
 import logging
 import sys
@@ -34,6 +35,38 @@ class FakeUpstream:
             content=self.body,
             headers={"content-type": self.content_type, **self.headers},
         )
+
+
+@pytest.fixture
+def auth():
+    """The auth service. By default it answers /me with an admin called user1."""
+    fake = FakeUpstream()
+    fake.respond(body=b'{"username": "user1", "is_admin": true}')
+    return fake
+
+
+@pytest.fixture
+def grafana():
+    return FakeUpstream()
+
+
+@pytest.fixture
+def admin_client(upstreams, auth, grafana):
+    """A gateway with the auth service and Grafana behind it. HTTPS, as the browser reaches it."""
+    emissions_client, air_quality_client = upstreams
+    app = create_app(
+        emissions_client,
+        air_quality=air_quality_client,
+        auth_client=httpx.AsyncClient(
+            base_url="http://auth.internal:8000", transport=httpx.MockTransport(auth)
+        ),
+        grafana_client=httpx.AsyncClient(
+            base_url="http://grafana.internal:3000", transport=httpx.MockTransport(grafana)
+        ),
+    )
+    with TestClient(app, base_url="https://testserver") as client:
+        client.cookies.set("aireuskadi_session", "the-jwt")
+        yield client
 
 
 @pytest.fixture
