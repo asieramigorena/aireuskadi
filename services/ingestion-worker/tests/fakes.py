@@ -5,12 +5,13 @@ The loaders take a function `fetch(url) -> bytes`; these are the files it gives 
 
 import io
 import json
+import random
 import tempfile
 import zipfile
 from pathlib import Path
 
 import geopandas as gpd
-from shapely.geometry import box
+from shapely.geometry import Polygon, box
 
 # --- E-PRTR register (aire_eprtr.csv)
 
@@ -134,3 +135,39 @@ def fake_fetch(requested=None):
         raise AssertionError(f"unexpected url {url}")
 
     return fetch
+
+
+# --- Boundaries with a border that wiggles
+
+X0, Y0, Y1 = 500_000, 4_780_000, 4_783_000
+
+
+def wiggly_pair(misaligned_by: float = 0.0) -> gpd.GeoDataFrame:
+    """Two municipalities (EPSG:25830) that share a border of 300 vertices that wiggles by up to
+    60 m, more than the tolerance, so that simplifying each one on its own would not agree.
+
+    The real layer is not a perfect coverage: the two sides of a border differ by a few centimetres.
+    `misaligned_by` moves each vertex of the east copy of the border by up to that many metres.
+    """
+    rng = random.Random(7)
+    border = [(X0 + rng.uniform(-60, 60), Y0 + i * 10) for i in range(301)]
+    other = random.Random(8)
+    east_border = [
+        (
+            x + other.uniform(-misaligned_by, misaligned_by),
+            y + other.uniform(-misaligned_by, misaligned_by),
+        )
+        for x, y in border
+    ]
+    west = Polygon([(X0 - 3000, Y0), (X0 - 3000, Y1), *reversed(border)])
+    east = Polygon([(X0 + 3000, Y1), (X0 + 3000, Y0), *east_border])
+    return gpd.GeoDataFrame(
+        {
+            "EUSTAT": ["99001", "99002"],
+            "NOMBRE_TOP": ["West", "East"],
+            "MUN_PROV": ["99", "99"],
+            "MUN_COMR": ["01", "01"],
+        },
+        geometry=[west, east],
+        crs="EPSG:25830",
+    )

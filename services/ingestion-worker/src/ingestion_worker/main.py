@@ -13,11 +13,11 @@ import logging
 import os
 from collections.abc import Callable, Sequence
 
+from aireuskadi_logger import configure_logging
 from sqlalchemy import Engine, create_engine
 
 from ingestion_worker.boundaries.run import run_boundaries
 from ingestion_worker.common.download import download
-from ingestion_worker.common.logs import configure_logging
 from ingestion_worker.eprtr.run import run_eprtr
 from ingestion_worker.jobs import default_jobs
 from ingestion_worker.measurements.run import run_measurements
@@ -31,7 +31,7 @@ def main(
     engine: Engine | None = None,
     fetch: Callable[[str], bytes] = download,
 ) -> None:
-    configure_logging()
+    configure_logging("ingestion_worker")
     parser = argparse.ArgumentParser(prog="ingestion-worker")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("boundaries", help="load the municipalities, districts and territories")

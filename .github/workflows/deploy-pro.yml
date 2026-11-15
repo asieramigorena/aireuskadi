@@ -1,6 +1,12 @@
 # Deploy to the cloud.
-# Every push to pro builds one image per folder with a Dockerfile and pushes it to
-# GitHub Container Registry as ghcr.io/<owner>/<repo>-<folder>:pro (plus a sha tag).
+# Every push to pro builds the images and pushes them to GitHub Container Registry as
+# ghcr.io/<owner>/<repo>-<name>:pro (plus a sha tag). Two kinds of image are found:
+#   - a folder with a file called Dockerfile: built with that folder as context, named after it
+#     (database/ -> aireuskadi-database);
+#   - a file called <something>.Dockerfile in a folder of services/: built with the root of the
+#     repository as context (the Python services share packages/ and uv.lock, and the gateway
+#     compiles web-client), named after the folder (services/api-gateway/gateway.Dockerfile ->
+#     aireuskadi-api-gateway).
 # Nothing connects to the server: Watchtower on the Oracle VM pulls the new :pro
 # images and restarts the containers. With no Dockerfile yet, the run just reports it.
 # promote.yml calls this workflow with the commit of a pull request, to publish the images
@@ -34,6 +40,11 @@ env:
 
 jobs:
   discover:
+    # A manual run only counts on the branch pro, which is protected (pull request, CI, promote). Run
+    # from another branch, for example dev, which is not protected, it would publish :pro and
+    # Watchtower would deploy it without any of that. The other triggers are not affected: a push to
+    # pro, and the call of promote.yml (whose event is the one of its own caller).
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/pro'
     runs-on: ubuntu-latest
     outputs:
       images: ${{ steps.find.outputs.images }}
@@ -44,9 +55,12 @@ jobs:
       - name: Find Dockerfiles
         id: find
         run: |
-          images=$(find . \( -name .git -o -name node_modules \) -prune -o -type f -name Dockerfile -printf '%h\n' \
+          alone=$(find . \( -name .git -o -name node_modules \) -prune -o -type f -name Dockerfile -printf '%h\n' \
             | sed 's|^\./||' | sort -u \
-            | jq -R -s -c 'split("\n") | map(select(length > 0)) | map({dir: ., name: (if . == "." then "app" else (split("/") | last) end)})')
+            | jq -R -s -c 'split("\n") | map(select(length > 0)) | map({name: (if . == "." then "app" else (split("/") | last) end), context: ., file: (. + "/Dockerfile")})')
+          services=$(find services -mindepth 2 -maxdepth 2 -type f -name '*.Dockerfile' 2>/dev/null | sort \
+            | jq -R -s -c 'split("\n") | map(select(length > 0)) | map({name: (split("/") | .[1]), context: ".", file: .})')
+          images=$(jq -c -n --argjson a "$alone" --argjson b "$services" '$a + $b')
           echo "images=$images" | tee -a "$GITHUB_OUTPUT"
           if [ "$images" = "[]" ]; then
             echo "::notice::No Dockerfile found yet, nothing to deploy."
@@ -80,7 +94,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.image.dir }}
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.file }}
           platforms: ${{ env.PLATFORMS }}
           push: true
           tags: |
@@ -89,5 +104,5 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ env.COMMIT }}
-          cache-from: type=gha,scope=${{ matrix.image.dir }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image.dir }}
+          cache-from: type=gha,scope=${{ matrix.image.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}

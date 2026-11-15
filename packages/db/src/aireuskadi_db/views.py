@@ -1,8 +1,10 @@
 """``unit_indicator``: materialized view with the impact indicators per municipality.
 
 For each municipality, pollutant and year:
-- declared_t: emissions declared by the facilities in the municipality (t/year)
-- t_km2: declared_t divided by the municipality area
+- declared_t: emissions declared by the facilities in the municipality (t/year); null when
+  no facility declared the pollutant that year (it was only measured): not the same as a
+  declared zero
+- t_km2: declared_t divided by the municipality area (null when declared_t is)
 - who_ratio: mean annual concentration measured by its stations, in ug/m3, divided by the
   WHO annual guideline (latest edition, always in ug/m3); null when there is no station or
   guideline
@@ -49,8 +51,8 @@ guideline AS (
 SELECT mu.ine_code AS municipality_code,
        COALESCE(d.pollutant_code, me.pollutant_code) AS pollutant_code,
        COALESCE(d.year, me.year) AS year,
-       COALESCE(d.declared_t, 0) AS declared_t,
-       COALESCE(d.declared_t, 0) / NULLIF(mu.area_km2, 0) AS t_km2,
+       d.declared_t,
+       d.declared_t / NULLIF(mu.area_km2, 0) AS t_km2,
        me.mean_ugm3 / NULLIF(g.value_ugm3, 0) AS who_ratio
 FROM declared d
 FULL JOIN measured me
