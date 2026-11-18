@@ -90,3 +90,12 @@ def test_the_cache_is_redis_at_redis_url_and_waits_very_little(monkeypatch):
     # A Redis that does not answer must not make every request of the page slow.
     options = cache.redis.connection_pool.connection_kwargs
     assert options["socket_connect_timeout"] <= 1 and options["socket_timeout"] <= 1
+
+
+def test_the_gateway_that_runs_limits_each_person_to_120_requests_a_minute(monkeypatch):
+    # How the limit works is in test_rate_limit.py, with a clock of its own; here only that the
+    # gateway that runs has it, with its number (121 real requests could cross a minute and fail).
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    monkeypatch.delenv("WEB_DIR", raising=False)
+
+    assert app_from_env().state.rate_limit.limit == 120
