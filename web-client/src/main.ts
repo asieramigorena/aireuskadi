@@ -1,7 +1,7 @@
 // SPA entry point: it joins the router, the calls to the gateway, the map and the panel.
 import "../styles/style.css";
 import { createApi, failureText } from "./api";
-import { renderControls, renderLanguages } from "./controls";
+import { renderControls, renderLanguages, type Choices } from "./controls";
 import { formatDensity, mapCaption } from "./format";
 import { HEXAGON_MAX_RADIUS, hexRadiusForZoom } from "./hexagons";
 import { buildAirLayers, buildLayers } from "./layers";
@@ -33,8 +33,9 @@ let units: UnitCollection | null = null;
 // The size of the hexagons follows the zoom (hexagons.ts); the map is drawn again when it changes.
 let hexRadius = HEXAGON_MAX_RADIUS;
 let legendShown = "";
-// The years with emissions, for the selector of the year: asked once (see the end of the file).
-let years: number[] = [];
+// The years and the pollutants with emissions, for their selectors: asked once (see the end of the
+// file).
+let choices: Choices = { years: [], pollutants: [] };
 let lastState: State | null = null;
 
 // What is asked for once: the boundaries of each level (the same for every pollutant and year) and
@@ -278,8 +279,8 @@ function drawControls(state: State, wanted: Language) {
   const chosenStation = state.route.name === "unit" ? state.route.station : null;
   const go = (url: string) => router.navigate(url);
   // With the trend open the year does nothing (the inventory has every year): no selector of it.
-  const shownYears = state.route.name === "trend" ? [] : years;
-  renderControls(element("controls"), state.selection, unit, go, chosenStation, shownYears);
+  const shown = state.route.name === "trend" ? { ...choices, years: [] } : choices;
+  renderControls(element("controls"), state.selection, unit, go, chosenStation, shown);
   renderLanguages(element("languages"), wanted, state.selection, unit, go, chosenStation);
 }
 
@@ -288,11 +289,11 @@ window.addEventListener("resize", fitMapToPanel);
 const router = createRouter(window, onState);
 router.start();
 
-// The years come once; until they do (or if they cannot be asked) there is no selector of the
-// year, and the year of the address is still the one that is shown.
-void api.years().then(
-  (found) => {
-    years = found;
+// The years and the pollutants come once; until they do (or if they cannot be asked) there is no
+// selector of them, and what the address says is still what is shown.
+void Promise.all([api.years(), api.pollutants()]).then(
+  ([years, pollutants]) => {
+    choices = { years, pollutants };
     if (lastState) drawControls(lastState, language());
   },
   () => {},

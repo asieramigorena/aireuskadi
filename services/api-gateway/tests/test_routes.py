@@ -6,6 +6,7 @@ ROUTES = [
     ("/api/v1/pollutants", "/pollutants"),
     ("/api/v1/facilities/points?pollutant=NOX&year=2023", "/facilities/points"),
     ("/api/v1/facilities/years", "/facilities/years"),
+    ("/api/v1/facilities/pollutants", "/facilities/pollutants"),
     ("/api/v1/facilities/12", "/facilities/12"),
     ("/api/v1/units?level=municipality&pollutant=NOX&year=2023", "/units"),
     ("/api/v1/units/boundaries?level=municipality", "/units/boundaries"),

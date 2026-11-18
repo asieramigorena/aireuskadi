@@ -41,6 +41,7 @@ export interface Texts {
   viewAir: string;
   airPollutantLabel: string;
   yearLabel: string;
+  emissionPollutantLabel: string;
   mapLabelEmissions: string;
   mapLabelAir: string;
   captionEmissions: (pollutant: string, year: number) => string;

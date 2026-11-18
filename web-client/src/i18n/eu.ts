@@ -29,6 +29,7 @@ export const eu: Texts = {
   viewAir: "Aire kalitatea",
   airPollutantLabel: "Aire kalitatearen kutsatzailea",
   yearLabel: "Urtea",
+  emissionPollutantLabel: "Isurien kutsatzailea",
   mapLabelEmissions: "Euskadiko isuri industrial aitortuen 3D mapa",
   mapLabelAir: "Euskadiko estazioetan neurtutako azken aire kalitatearen 3D mapa",
   captionEmissions: (pollutant, year) => `Aitortutako isuri industrialak: ${pollutant}, ${year}`,
