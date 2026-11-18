@@ -86,6 +86,11 @@ async def pollutants(request: Request):
     return await ask(request, "emissions", "/pollutants")
 
 
+@router.get("/facilities/years")
+async def facility_years(request: Request):
+    return await ask(request, "emissions", "/facilities/years")
+
+
 @router.get("/facilities/points")
 async def facility_points(request: Request):
     return await ask(request, "emissions", "/facilities/points", ("pollutant", "year"))
@@ -106,6 +111,12 @@ async def units(request: Request):
 @router.get("/units/boundaries")
 async def unit_boundaries(request: Request):
     return await ask(request, "emissions", "/units/boundaries", ("level",))
+
+
+@router.get("/inventory")
+async def inventory(request: Request):
+    names = ("pollutant", "classification", "sector", "from", "to")
+    return await ask(request, "emissions", "/inventory", names)
 
 
 @router.get("/units/{code}")
