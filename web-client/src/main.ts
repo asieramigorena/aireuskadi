@@ -6,15 +6,16 @@ import { formatDensity, mapCaption } from "./format";
 import { HEXAGON_MAX_RADIUS, hexRadiusForZoom } from "./hexagons";
 import { buildAirLayers, buildLayers } from "./layers";
 import { createStatus } from "./status";
-import { detectLanguage, language, setLanguage, texts } from "./i18n";
+import { detectLanguage, language, setLanguage, texts, type Language } from "./i18n";
 import { levelForZoom } from "./levels";
 import { renderLegend } from "./legend";
 import { createMap } from "./map";
 import { applyPageTexts } from "./page";
 import { renderPanel, type PanelView } from "./panel";
-import { createRouter, homeUrl, unitUrl, type Selection, type State } from "./router";
+import { createRouter, homeUrl, unitUrl, type Classification, type Selection, type State } from "./router";
 import { maxDensity } from "./scale";
 import type { BoundaryCollection, Level, Point, StationCollection, UnitCollection, UnitIndicators } from "./types";
+import { drawTrendChart, focusedTrendControl, loadTrend, restoreTrendFocus, trendSeries } from "./trend";
 import { withIndicators } from "./units";
 import { insetFor } from "./view";
 
@@ -32,12 +33,17 @@ let units: UnitCollection | null = null;
 // The size of the hexagons follows the zoom (hexagons.ts); the map is drawn again when it changes.
 let hexRadius = HEXAGON_MAX_RADIUS;
 let legendShown = "";
+// The years with emissions, for the selector of the year: asked once (see the end of the file).
+let years: number[] = [];
+let lastState: State | null = null;
 
 // What is asked for once: the boundaries of each level (the same for every pollutant and year) and
 // the numbers of each level, pollutant and year. Going back and forth between zooms or pollutants
 // does not ask again.
 const boundaryCache = new Map<Level, BoundaryCollection>();
 const indicatorCache = new Map<string, UnitIndicators[]>();
+// The chart of the trend that is drawn, if any: it is destroyed before the panel changes.
+let chart: { destroy(): void } | null = null;
 let mapLoad = new AbortController();
 let cardLoad = new AbortController();
 
@@ -89,7 +95,9 @@ function fitMapToPanel() {
 }
 
 function showPanel(view: PanelView) {
-  renderPanel(panel, view, selection!, () => router.navigate(homeUrl(selection!)));
+  chart?.destroy();
+  chart = null;
+  renderPanel(panel, view, selection!, () => router.navigate(homeUrl(selection!)), (url) => router.navigate(url));
   fitMapToPanel();
 }
 
@@ -197,6 +205,26 @@ async function showUnit(code: string, station: number | null) {
   }
 }
 
+/** The trend of the inventory of the pollutant of the map, in the panel. Methane is only a total. */
+async function showTrend(classification: Classification) {
+  cardLoad.abort();
+  cardLoad = new AbortController();
+  // A choice inside the trend keeps the panel as it is while the new one comes (no "loading" in
+  // between), and gives the focus of the keyboard back to the control that had it.
+  const focused = focusedTrendControl(panel);
+  if (!panel.querySelector(".trend")) showPanel({ status: "loading" });
+  try {
+    const inventory = await loadTrend(api, selection!.pollutant, classification, cardLoad.signal);
+    showPanel({ status: "trend", inventory, classification });
+    const canvas = panel.querySelector("canvas");
+    if (inventory && canvas) chart = drawTrendChart(canvas, trendSeries(inventory));
+    restoreTrendFocus(panel, focused);
+  } catch (error) {
+    const text = failureText(error);
+    if (text !== null) showPanel({ status: "error", message: text });
+  }
+}
+
 function onState(state: State) {
   const first = !selection;
   const dataChanged =
@@ -228,16 +256,14 @@ function onState(state: State) {
   }
   if (dataChanged) void loadMap();
 
-  // The controls say the map and the language that are shown, and keep the unit whose panel is open.
-  const unit = state.route.name === "unit" ? state.route.code : null;
-  const chosenStation = state.route.name === "unit" ? state.route.station : null;
-  const go = (url: string) => router.navigate(url);
-  renderControls(element("controls"), selection, unit, go, chosenStation);
-  renderLanguages(element("languages"), wanted, selection, unit, go, chosenStation);
+  lastState = state;
+  drawControls(state, wanted);
 
   cardLoad.abort();
   if (state.route.name === "unit") {
     void showUnit(state.route.code, state.route.station);
+  } else if (state.route.name === "trend") {
+    void showTrend(state.route.classification);
   } else if (state.route.name === "not-found") {
     showPanel({ status: "error", message: texts().pageNotFound });
   } else {
@@ -245,7 +271,29 @@ function onState(state: State) {
   }
 }
 
+/** The controls say the map, the year and the language that are shown, and keep the unit whose panel
+ * is open. */
+function drawControls(state: State, wanted: Language) {
+  const unit = state.route.name === "unit" ? state.route.code : null;
+  const chosenStation = state.route.name === "unit" ? state.route.station : null;
+  const go = (url: string) => router.navigate(url);
+  // With the trend open the year does nothing (the inventory has every year): no selector of it.
+  const shownYears = state.route.name === "trend" ? [] : years;
+  renderControls(element("controls"), state.selection, unit, go, chosenStation, shownYears);
+  renderLanguages(element("languages"), wanted, state.selection, unit, go, chosenStation);
+}
+
 // The panel changes place when the screen turns or changes size.
 window.addEventListener("resize", fitMapToPanel);
 const router = createRouter(window, onState);
 router.start();
+
+// The years come once; until they do (or if they cannot be asked) there is no selector of the
+// year, and the year of the address is still the one that is shown.
+void api.years().then(
+  (found) => {
+    years = found;
+    if (lastState) drawControls(lastState, language());
+  },
+  () => {},
+);

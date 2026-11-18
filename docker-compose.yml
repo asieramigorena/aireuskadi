@@ -1,11 +1,11 @@
 # Local development stack: PostgreSQL + PostGIS, Redis (the cache of the gateway) and the services.
-# Copy .env.example to .env before running `docker compose up -d`.
-# The application services are added here as they get their Dockerfile.
+# Copy .env.example to .env, then `docker compose --profile worker up -d --build` starts everything,
+# the loads of the data too (without `--profile worker`, everything but the loads).
 # Loki, Alloy, Prometheus and Grafana start with the rest: the logs and the state of every service
 # are in Grafana, at http://127.0.0.1:8080/admin with an admin account (dashboards "Health",
-# "Ingestion", "Services" and "API"). Accounts: `uv run --env-file .env aireuskadi-admin add <name>`
-# and `... promote <name>`.
-# The ingestion worker runs on demand, not with `up`:
+# "Ingestion", "Services" and "API"). Accounts:
+#   docker compose run --rm --entrypoint aireuskadi-admin db-init add <name>   (then `promote`)
+# The scheduler (profile worker) runs the loads when they are due; one load by hand:
 #   docker compose run --rm ingestion-worker boundaries
 #   docker compose run --rm ingestion-worker eprtr --year 2023
 # The image of the ingestion worker and the settings that its services share.
@@ -40,6 +40,25 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # Makes the schema (the Alembic migrations) and the roles of the services, and stops. The
+  # services wait for it, so a fresh database is ready before they connect. It runs at every `up`:
+  # with nothing to do it changes nothing.
+  db-init:
+    build:
+      context: .
+      dockerfile: services/ingestion-worker/worker.Dockerfile
+    entrypoint: ["aireuskadi-db-init"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      POSTGRES_READER_USER: ${POSTGRES_READER_USER}
+      POSTGRES_READER_PASSWORD: ${POSTGRES_READER_PASSWORD}
+      POSTGRES_AUTH_USER: ${POSTGRES_AUTH_USER}
+      POSTGRES_AUTH_PASSWORD: ${POSTGRES_AUTH_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   # The cache of the gateway (services/api-gateway/src/api_gateway/cache.py). Nothing in it must
   # survive: no disk, and a ceiling of memory past which the oldest answers are dropped, so that
   # questions with made-up values cannot fill the machine.
@@ -67,8 +86,8 @@ services:
       # reach this container.
       DATABASE_URL: postgresql+psycopg://${POSTGRES_READER_USER}:${POSTGRES_READER_PASSWORD}@postgres:5432/${POSTGRES_DB}
     depends_on:
-      postgres:
-        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     # /health asks the database. The image has no curl, so Python makes the request; a 503 raises
     # in urlopen and the command fails.
     healthcheck:
@@ -94,8 +113,8 @@ services:
       AUTH_DATABASE_URL: postgresql+psycopg://${POSTGRES_AUTH_USER}:${POSTGRES_AUTH_PASSWORD}@postgres:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
     depends_on:
-      postgres:
-        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     healthcheck:
       test:
         - CMD
@@ -118,8 +137,8 @@ services:
       # The read-only role, and the scheme of Node (postgresql://), not the one of SQLAlchemy.
       DATABASE_URL: postgresql://${POSTGRES_READER_USER}:${POSTGRES_READER_PASSWORD}@postgres:5432/${POSTGRES_DB}
     depends_on:
-      postgres:
-        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     # /health asks the database. The image has no curl: Node makes the request, and a 503 or an
     # error ends with a non-zero exit code.
     healthcheck:
@@ -210,10 +229,12 @@ services:
     networks: [edge]
     restart: unless-stopped
 
-  # Ingestion worker. Inside a container its logs reach Loki (see the logging profile).
-  # Load the boundaries before the E-PRTR register.
+  # Ingestion worker, for one load by hand: `docker compose run --rm ingestion-worker <load>`.
+  # Load the boundaries before the E-PRTR register. Its own profile, so that `--profile worker`
+  # does not start it without a load to run.
   ingestion-worker:
     <<: *ingestion-worker
+    profiles: [manual]
     environment:
       <<: *ingestion-environment
       # Seconds the container stays up after a run so that Alloy reads its logs (see
@@ -221,11 +242,14 @@ services:
       LOG_LINGER_SECONDS: ${LOG_LINGER_SECONDS:-20}
 
   # The same image, kept up: it runs the loads when they are due (measurements every hour, the
-  # boundaries and the E-PRTR register every month) and remembers nothing but ingestion_run, so
-  # a restart loses nothing. Start it with: docker compose --profile worker up -d ingestion-scheduler
+  # boundaries, the E-PRTR register and the inventory every month) and remembers nothing but
+  # ingestion_run, so a restart loses nothing. On its first start it loads them all.
   ingestion-scheduler:
     <<: *ingestion-worker
     command: ["schedule"]
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   # Centralised logs and metrics. Alloy reads the logs of every container and sends them to Loki,

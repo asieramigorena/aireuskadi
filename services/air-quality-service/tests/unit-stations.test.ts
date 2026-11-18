@@ -20,7 +20,9 @@ type UnitStations = {
   unit: { code: string; name: string; level: string };
   measured: boolean;
   reason: string | null;
-  stations: { id: number; code: string; name: string; geometry: unknown; readings: Reading[] }[] | null;
+  stations:
+    | { id: number; code: string; name: string; geometry: unknown; meteo_only: boolean; recent: boolean; readings: Reading[] }[]
+    | null;
 };
 
 const MUNICIPALITY = "98001"; // the municipality that the test stations are in (tests/seed.ts)
@@ -186,3 +188,28 @@ test("a database that fails is a 500 with a fixed text that says nothing of the 
   expect(response.body).not.toContain("password");
 });
 
+
+// --- what kind of station it is ----------------------------------------------------------------
+
+dbTest("a meteorological station says so and is not recent", async ({ db }) => {
+  await addStation(db, { code: "T_M", name: "Meteo", meteoOnly: true });
+
+  const body = await stationsOf(db);
+
+  expect(body.stations![0]).toMatchObject({ code: "T_M", meteo_only: true, recent: false, readings: [] });
+});
+
+dbTest("a station with a value in the last 7 days is recent and one with only older values is not", async ({ db }) => {
+  const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3600e3).toISOString();
+  const a = await addStation(db, { code: "T_A" });
+  await addReadings(db, a, "T_X", [{ ts: hoursAgo(1), value: 5 }]);
+  const b = await addStation(db, { code: "T_B" });
+  await addReadings(db, b, "T_X", [{ ts: hoursAgo(8 * 24), value: 6 }]);
+
+  const body = await stationsOf(db);
+
+  expect(body.stations!.map((s) => [s.code, s.meteo_only, s.recent, s.readings.length])).toEqual([
+    ["T_A", false, true, 1],
+    ["T_B", false, false, 1],
+  ]);
+});

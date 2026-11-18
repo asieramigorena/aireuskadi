@@ -171,3 +171,128 @@ def wiggly_pair(misaligned_by: float = 0.0) -> gpd.GeoDataFrame:
         geometry=[west, east],
         crs="EPSG:25830",
     )
+
+
+# --- Inventory of emissions 1990-<edition> (1_ECA_CAPV, 2_ECA_SNAP, 3_ECA_NFR)
+
+
+def xlsx(sheets: dict[str, list[list]]) -> bytes:
+    """A workbook with one sheet per key and those rows in it."""
+    from openpyxl import Workbook
+
+    book = Workbook()
+    book.remove(book.active)
+    for name, rows in sheets.items():
+        sheet = book.create_sheet(name)
+        for row in rows:
+            sheet.append(row)
+    data = io.BytesIO()
+    book.save(data)
+    return data.getvalue()
+
+
+def with_cell(data: bytes, old: str, new: str) -> bytes:
+    """The workbook with the XML of a value replaced, to write what openpyxl would not
+    (e.g. `1E999`, which is read back as infinity)."""
+    source = zipfile.ZipFile(io.BytesIO(data))
+    result = io.BytesIO()
+    with zipfile.ZipFile(result, "w") as target:
+        for item in source.infolist():
+            content = source.read(item)
+            if item.filename.startswith("xl/worksheets/"):
+                content = content.replace(old.encode(), new.encode())
+            target.writestr(item, content)
+    return result.getvalue()
+
+
+def report_sheet(
+    head: list, rows: list[list], years: list[int], total: list | None, with_total: bool = True
+) -> list[list]:
+    """A sheet laid out like the real ones: title, units, header with the years, the rows, the
+    total of the rows (or the one given) and the source."""
+    columns = len(head)
+    if total is None:
+        total = [sum(row[columns + i] for row in rows) for i in range(len(years))]
+    total_row = ["Total emisiones. C.A. de Euskadi", *([None] * (columns - 1)), *total]
+    return [
+        ["Evolución de las emisiones"],
+        ["C.A de Euskadi. 1990-...."],
+        ["Unidades: toneladas"],
+        [*head, *years],
+        *rows,
+        *([total_row] if with_total else []),
+        ["Fuente: Gobierno Vasco."],
+    ]
+
+
+def inventory_files(
+    edition: int = 1991,
+    years: list[int] | None = None,
+    snap: dict[str, list[list]] | None = None,
+    nfr: dict[str, list[list]] | None = None,
+    totals: dict[str, list] | None = None,
+    missing: tuple[str, ...] = (),
+    missing_total: tuple[str, ...] = (),
+    methane: bool = True,
+) -> tuple[bytes, bytes, bytes]:
+    """The three files of an edition. Every SNAP sheet has sector 01 and every NFR sheet sector 1
+    unless `snap`/`nfr` give other rows for a sheet; `totals` replaces the total of a sheet;
+    `missing` leaves sheets out, `missing_total` their total row, `methane=False` the CH4 row."""
+    years = years or list(range(1990, edition + 1))
+    ones = [1.0] * len(years)
+    snap, nfr, totals = snap or {}, nfr or {}, totals or {}
+
+    def book(names, head, default, given):
+        sheets = {"Índice": [["Índice"]]}
+        for name in names:
+            if name not in missing:
+                rows = given.get(name, [default])
+                with_total = name not in missing_total
+                sheets[name] = report_sheet(head, rows, years, totals.get(name), with_total)
+        return xlsx(sheets)
+
+    snap_book = book(
+        [f"2.{i}" for i in range(1, 9)],
+        ["Código \nSNAP", "Descripción SNAP"],
+        ["01", "Combustión en la producción de energía", *ones],
+        snap,
+    )
+    nfr_book = book(
+        [f"3.{i}" for i in range(1, 9)],
+        ["Código NFR para CRLTAP\nSNAP(*)", "Descripción NFR para CRLTAP"],
+        [1, "Energía", *ones],
+        nfr,
+    )
+    capv_rows = [
+        ["Emisiones PROT por sustancia"],
+        ["NOX: Óxidos de nitrógeno", *ones],
+        *([["CH4: Metano ", *[2.0] * len(years)]] if methane else []),
+    ]
+    capv_book = xlsx(
+        {
+            "Índice": [["Índice"]],
+            "1.1": [
+                ["1.1.- Evolución"],
+                ["Unidades: toneladas"],
+                ["Sustancia", *years],
+                *capv_rows,
+            ],
+            "1.2": [["Unidades: toneladas equivalentes"]],
+            "1.3": [["Unidades: Índice base 1990=100"]],
+        }
+    )
+    return capv_book, snap_book, nfr_book
+
+
+def inventory_fetch(files: tuple[bytes, bytes, bytes], year: int = 1991):
+    """A fetch that gives the three files of the edition `year` and refuses any other url."""
+    from ingestion_worker.inventory.run import FILES, file_url
+
+    pages = {file_url(name, year): data for name, data in zip(FILES, files, strict=True)}
+
+    def fetch(url):
+        if url not in pages:
+            raise AssertionError(f"unexpected url {url}")
+        return pages[url]
+
+    return fetch

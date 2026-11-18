@@ -3,13 +3,13 @@
 // link can be shared, opened in another tab, and Back works), and the page takes the click.
 import { AIR_POLLUTANT_CODES, airPollutantName } from "./format";
 import { LANGUAGES, texts, textsOf, type Language } from "./i18n";
-import { DEFAULT_POLLUTANT, homeUrl, unitUrl, type Selection, type View } from "./router";
+import { DEFAULT_POLLUTANT, homeUrl, trendUrl, unitUrl, type Selection, type View } from "./router";
 
 const VIEWS: View[] = ["emissions", "air"];
 
 /** A click that the page takes for itself: a click with a key or another button is the browser's
  * (another tab, another window). */
-const isPlainClick = (event: MouseEvent) =>
+export const isPlainClick = (event: MouseEvent) =>
   event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
 
 /** The focus of the keyboard stays where it was when the controls are drawn again: choosing with the
@@ -29,15 +29,17 @@ function keepingFocus(root: HTMLElement, draw: () => void): void {
 /** Writes the controls in `root`, in place of the ones that were there. `unit` is the code of the
  * unit whose panel is open, if any, and `station` the one that is shown in it: the controls keep
  * them, so that only the map changes (the emissions have no stations: the address drops it).
- * The names are the ones of the language in use. */
+ * `years` are the years with emissions (the API says them); without them there is no selector of
+ * the year. The names are the ones of the language in use. */
 export function renderControls(
   root: HTMLElement,
   selection: Selection,
   unit: string | null,
   navigate: (url: string) => void,
   station: number | null = null,
+  years: number[] = [],
 ): void {
-  keepingFocus(root, () => build(root, selection, unit, navigate, station));
+  keepingFocus(root, () => build(root, selection, unit, navigate, station, years));
 }
 
 /** Writes the selector of the language in `root`: a link for each language, with its code as the text
@@ -78,6 +80,7 @@ function build(
   unit: string | null,
   navigate: (url: string) => void,
   station: number | null,
+  years: number[],
 ): void {
   const urlOf = (chosen: Selection) => (unit ? unitUrl(unit, chosen, station) : homeUrl(chosen));
   root.replaceChildren();
@@ -97,7 +100,21 @@ function build(
     root.append(link);
   }
 
-  if (selection.view !== "air") return;
+  if (selection.view === "emissions") {
+    if (years.length > 0) root.append(yearChoice(selection, years, (year) => navigate(urlOf({ ...selection, year }))));
+    // The trend of the inventory opens in the panel, over the map of the emissions.
+    const trend = document.createElement("a");
+    trend.className = "trend-link";
+    trend.textContent = texts().trendLink;
+    trend.setAttribute("href", trendUrl(selection, "SNAP"));
+    trend.addEventListener("click", (event) => {
+      if (!isPlainClick(event)) return;
+      event.preventDefault();
+      navigate(trendUrl(selection, "SNAP"));
+    });
+    root.append(trend);
+    return;
+  }
   const choice = document.createElement("select");
   choice.setAttribute("aria-label", texts().airPollutantLabel);
   const codes = AIR_POLLUTANT_CODES.includes(selection.pollutant) ? AIR_POLLUTANT_CODES : [...AIR_POLLUTANT_CODES, selection.pollutant];
@@ -110,4 +127,21 @@ function build(
   choice.value = selection.pollutant;
   choice.addEventListener("change", () => navigate(urlOf({ ...selection, pollutant: choice.value })));
   root.append(choice);
+}
+
+/** The selector of the year of the emissions: the newest first. A year that the address says and
+ * that is not in the list is added, so that the selector never says another year than the map. */
+function yearChoice(selection: Selection, years: number[], choose: (year: number) => void): HTMLSelectElement {
+  const choice = document.createElement("select");
+  choice.setAttribute("aria-label", texts().yearLabel);
+  const shown = years.includes(selection.year) ? years : [...years, selection.year];
+  for (const year of [...shown].sort((a, b) => b - a)) {
+    const option = document.createElement("option");
+    option.value = String(year);
+    option.textContent = String(year);
+    choice.append(option);
+  }
+  choice.value = String(selection.year);
+  choice.addEventListener("change", () => choose(Number(choice.value)));
+  return choice;
 }

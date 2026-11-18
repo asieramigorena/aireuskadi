@@ -39,6 +39,8 @@ class MeasurementsResult:
     accepted: list[MeasurementRecord] = field(default_factory=list)
     rejected: list[RejectedValue] = field(default_factory=list)
     skipped: int = 0  # values that are not data: placeholders, weather and "no data"
+    # Station code -> True if everything it sent is the weather (it measures no pollutant).
+    meteo_only: dict[str, bool] = field(default_factory=dict)
 
     @property
     def rows_read(self) -> int:
@@ -81,6 +83,13 @@ def parse_measurements(text: str) -> MeasurementsResult:
         for station in hour["station"]:
             # The hours that have not been measured yet come as zeros, without this qualification.
             placeholder = "airQualityStation" not in station
+            # Every hour counts, placeholders too: a pollutant in any of them is enough.
+            sent = {measurement["name"] for measurement in station["measurements"]}
+            if sent:
+                weather = sent <= NOT_POLLUTANTS
+                result.meteo_only[station["id"]] = (
+                    result.meteo_only.get(station["id"], True) and weather
+                )
             for measurement in station["measurements"]:
                 if (
                     placeholder

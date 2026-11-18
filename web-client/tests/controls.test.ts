@@ -17,7 +17,8 @@ beforeEach(() => {
 
 const show = (selection: Selection, unit: string | null = null, station: number | null = null) =>
   renderControls(root, selection, unit, navigate, station);
-const links = () => [...root.querySelectorAll("a")];
+// The links of the two maps (the link to the trend is tested on its own).
+const links = () => [...root.querySelectorAll<HTMLAnchorElement>("a:not(.trend-link)")];
 const select = () => root.querySelector("select");
 
 describe("the switch between the two maps", () => {
@@ -143,6 +144,59 @@ describe("the selector of the pollutant of the air quality", () => {
 
 });
 
+describe("the selector of the year of the emissions", () => {
+  const YEARS = [2019, 2020, 2021, 2022, 2023];
+  const showYears = (selection: Selection, unit: string | null = null) =>
+    renderControls(root, selection, unit, navigate, null, YEARS);
+
+  test("is only there in the map of the emissions: the air quality is the latest value, it has no year", () => {
+    showYears(air());
+    expect(select()?.getAttribute("aria-label")).not.toBe("Year");
+
+    showYears(emissions);
+    expect(select()?.getAttribute("aria-label")).toBe("Year");
+  });
+
+  test("has the years with data, the newest first, and the one of the map is the selected one", () => {
+    showYears({ ...emissions, year: 2021 });
+
+    expect([...root.querySelectorAll("option")].map((option) => option.value)).toEqual(["2023", "2022", "2021", "2020", "2019"]);
+    expect(select()?.value).toBe("2021");
+  });
+
+  test("a year that is not in the list (the address says it) is still the one that is shown", () => {
+    showYears({ ...emissions, year: 2010 });
+
+    expect(select()?.value).toBe("2010");
+  });
+
+  test("choosing another one navigates to its map, and keeps the pollutant and the unit that is open", () => {
+    showYears({ ...emissions, pollutant: "SOX" }, "48020");
+    (select() as HTMLSelectElement).value = "2020";
+    select()?.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(navigate).toHaveBeenLastCalledWith("/unit/48020?pollutant=SOX&year=2020");
+  });
+
+  test("is not there while the years are not known", () => {
+    show(emissions);
+
+    expect(select()).toBeNull();
+  });
+});
+
+describe("the link to the trend of the inventory", () => {
+  test("is only in the map of the emissions, and keeps its pollutant and year", () => {
+    show(air());
+    expect(root.querySelector("a.trend-link")).toBeNull();
+
+    show({ ...emissions, pollutant: "SOX", year: 2021 });
+    const link = root.querySelector("a.trend-link");
+    expect(link?.textContent).toBe("Trend");
+    expect(link?.getAttribute("href")).toBe("/trend?pollutant=SOX&year=2021");
+  });
+});
+
 describe("the focus of the keyboard", () => {
   test("stays on the control that had it when they are drawn again: choosing with the keyboard does not send the person to the top of the page", () => {
     show(air());
@@ -157,13 +211,13 @@ describe("the focus of the keyboard", () => {
     expect(document.activeElement).toBe(links()[1]);
   });
 
-  test("when the control that had it goes away (the selector, back to the emissions), it goes to the last one that is left", () => {
+  test("when the control that had it goes away (the selector, back to the emissions), it goes to the one in its place", () => {
     show(air());
     (select() as HTMLElement).focus();
 
     show(emissions);
 
-    expect(document.activeElement).toBe(links()[1]);
+    expect(document.activeElement).toBe(root.querySelector("a.trend-link"));
   });
 });
 
@@ -175,7 +229,7 @@ describe("drawing it again", () => {
     expect(root.querySelectorAll("select")).toHaveLength(1);
 
     show(emissions);
-    expect(root.querySelectorAll("a")).toHaveLength(2);
+    expect(links()).toHaveLength(2);
     expect(root.querySelectorAll("select")).toHaveLength(0);
   });
 

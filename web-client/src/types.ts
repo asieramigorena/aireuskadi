@@ -102,6 +102,10 @@ export interface UnitStation {
   code: string;
   name: string;
   geometry: { type: string; coordinates: number[] } | null;
+  /** It only sends the weather: it measures no pollutant. */
+  meteo_only: boolean;
+  /** It sent a value in the last 7 days. */
+  recent: boolean;
   readings: StationReading[];
 }
 
@@ -127,4 +131,14 @@ export interface UnitCard {
   emissions: UnitEmission[];
   /** null when the air quality service could not answer: the card is still the card. */
   air_quality: UnitAirQuality | null;
+}
+
+/** The yearly tonnes of a pollutant in the whole Basque Country by sector (GET /inventory). */
+export interface Inventory {
+  attribution: string;
+  pollutant: string;
+  unit: string;
+  /** SNAP or NFR (two ways of splitting the same total into sectors), or TOTAL (methane). */
+  classification: string;
+  series: { sector: { code: string; name: string }; year: number; value: number }[];
 }

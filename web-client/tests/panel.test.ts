@@ -40,6 +40,8 @@ const station = (overrides: Partial<UnitStation> = {}): UnitStation => ({
   code: "BI1",
   name: "Mazarredo",
   geometry: { type: "Point", coordinates: [-2.93, 43.26] },
+  meteo_only: false,
+  recent: true,
   readings: [reading()],
   ...overrides,
 });
@@ -56,7 +58,7 @@ let root: HTMLElement;
 let onClose: Mock<() => void>;
 
 function show(view: PanelView) {
-  renderPanel(root, view, SELECTION, onClose);
+  renderPanel(root, view, SELECTION, onClose, () => {});
 }
 
 beforeEach(() => {
@@ -181,7 +183,7 @@ describe("the air quality of the unit", () => {
   });
 
   test("in the map of the air quality it comes first, because it is what the person came to see", () => {
-    renderPanel(root, { status: "card", card: card({ air_quality: air() }) }, { ...SELECTION, view: "air", pollutant: "NO2" }, onClose);
+    renderPanel(root, { status: "card", card: card({ air_quality: air() }) }, { ...SELECTION, view: "air", pollutant: "NO2" }, onClose, () => {});
 
     const children = [...root.children].map((child) => child.tagName);
     expect(children.indexOf("SECTION")).toBeLessThan(children.indexOf("TABLE"));
@@ -189,7 +191,7 @@ describe("the air quality of the unit", () => {
   });
 
   test("the emissions table is still there in the map of the air quality, and no row of it is marked: the map is not showing it", () => {
-    renderPanel(root, { status: "card", card: card({ air_quality: air() }) }, { ...SELECTION, view: "air", pollutant: "CO" }, onClose);
+    renderPanel(root, { status: "card", card: card({ air_quality: air() }) }, { ...SELECTION, view: "air", pollutant: "CO" }, onClose, () => {});
 
     expect(root.querySelector("caption")?.textContent).toBe("Declared industrial emissions in 2023");
     expect(root.querySelector("tr[aria-current='true']")).toBeNull();
@@ -258,7 +260,7 @@ describe("the air quality of the unit", () => {
       show({ status: "card", card: card({ air_quality: quiet }), station: 8 });
 
       expect(blocks().map((block) => block.open)).toEqual([false, true]);
-      expect(blocks()[1].textContent).toContain("No values yet.");
+      expect(blocks()[1].textContent).toContain("No recent readings.");
     });
   });
 
@@ -295,11 +297,27 @@ describe("the air quality of the unit", () => {
     expect(rowsOf(section()).map((row) => row[2])).toEqual(["Not enough data", "No WHO guideline"]);
   });
 
+  test("a meteorological station says that it does not measure pollutants", () => {
+    show({ status: "card", card: card({ air_quality: air({ stations: [station({ meteo_only: true, recent: false, readings: [] })] }) }) });
+
+    const block = section()?.querySelector("details");
+    expect(block?.textContent).toContain("Meteorological station: it does not measure pollutants.");
+    expect(block?.querySelector("table")).toBeNull();
+  });
+
+  test("a station without recent readings says so and still shows its older values", () => {
+    show({ status: "card", card: card({ air_quality: air({ stations: [station({ recent: false })] }) }) });
+
+    const block = section()?.querySelector("details");
+    expect(block?.textContent).toContain("No recent readings.");
+    expect(block?.querySelectorAll("table.readings tbody tr").length).toBe(1);
+  });
+
   test("a station without values is in the list and says so", () => {
     show({ status: "card", card: card({ air_quality: air({ stations: [station({ readings: [] }), station({ id: 8, name: "Other" })] }) }) });
 
     const first = section()?.querySelector("details");
-    expect(first?.textContent).toContain("No values yet.");
+    expect(first?.textContent).toContain("No recent readings.");
     expect(first?.querySelector("table")).toBeNull();
   });
 

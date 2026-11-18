@@ -7,9 +7,11 @@ from datetime import UTC, datetime
 
 import pytest
 from aireuskadi_db import (
+    ActivitySector,
     District,
     Facility,
     FacilityEmission,
+    InventoryEmission,
     Measurement,
     Municipality,
     Pollutant,
@@ -95,8 +97,10 @@ def engine():
     yield engine
     # The API reads through its own connection, so what a test writes has to be committed
     # and removed here. Codes that start with TST (pollutants), T0000000 (NIMA) and 99 (units)
-    # do not exist in the real data.
+    # do not exist in the real data, nor sectors that start with X.
     with engine.begin() as conn:
+        conn.execute(text("DELETE FROM core.inventory_emission WHERE pollutant_code LIKE 'TST%'"))
+        conn.execute(text("DELETE FROM core.activity_sector WHERE code LIKE 'X%'"))
         conn.execute(text("DELETE FROM core.measurement WHERE pollutant_code LIKE 'TST%'"))
         conn.execute(text("DELETE FROM core.station WHERE code LIKE 'T0000000%'"))
         conn.execute(text("DELETE FROM core.facility_emission WHERE pollutant_code LIKE 'TST%'"))
@@ -224,6 +228,39 @@ def add_measurements(engine):
                         averaging_period="1h",
                         value=value,
                         unit=unit,
+                    )
+                )
+            session.commit()
+
+    return add
+
+
+@pytest.fixture
+def add_inventory(engine, add_pollutant):
+    """add(rows): rows of (pollutant, classification, sector code, year, value). The pollutants
+    must start with TST and the sector codes with X; each sector is named "Sector <code>"."""
+
+    def add(rows):
+        with Session(engine) as session:
+            for pollutant in {row[0] for row in rows}:
+                add_pollutant(pollutant, f"Test {pollutant}")
+            sectors = {}
+            for _, classification, code, _, _ in rows:
+                if (classification, code) not in sectors:
+                    sector = ActivitySector(
+                        classification=classification, code=code, name=f"Sector {code}"
+                    )
+                    session.add(sector)
+                    session.flush()
+                    sectors[(classification, code)] = sector.id
+            for pollutant, classification, code, year, value in rows:
+                session.add(
+                    InventoryEmission(
+                        pollutant_code=pollutant,
+                        activity_sector_id=sectors[(classification, code)],
+                        year=year,
+                        value=value,
+                        unit="t",
                     )
                 )
             session.commit()

@@ -59,6 +59,25 @@ describe("the calls go only to the gateway, to the routes of /api/v1", () => {
     expect(Object.fromEntries(url.searchParams)).toEqual({ level: "territory" });
   });
 
+  test("the years of the register that have emissions", async () => {
+    const { api, fetchFn } = apiWith(answer([2019, 2020]));
+
+    expect(await api.years()).toEqual([2019, 2020]);
+
+    expect(urlOf(fetchFn).pathname).toBe("/api/v1/facilities/years");
+  });
+
+  test("the trend of the inventory of a pollutant, by the sectors of a classification", async () => {
+    const answer_ = { attribution: "x", pollutant: "NOX", unit: "t", classification: "NFR", series: [] };
+    const { api, fetchFn } = apiWith(answer(answer_));
+
+    expect(await api.inventory("NOX", "NFR")).toEqual(answer_);
+
+    const url = urlOf(fetchFn);
+    expect(url.pathname).toBe("/api/v1/inventory");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ pollutant: "NOX", classification: "NFR" });
+  });
+
   test("the card of one unit", async () => {
     const card = { code: "01036", level: "municipality", name: "Laudio", emissions: [] };
     const { api, fetchFn } = apiWith(answer(card));

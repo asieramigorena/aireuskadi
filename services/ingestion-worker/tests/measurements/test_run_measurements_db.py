@@ -99,3 +99,15 @@ def test_running_it_again_every_hour_does_not_duplicate_anything(engine, boundar
         )
         == 2
     )
+
+
+def test_a_run_says_whether_each_station_only_sends_the_weather(engine, boundaries):
+    # The station of the fake county sends NO2: a flag left at true must come back to false.
+    run_measurements(engine, now=NOW, fetch=fake_fetch())
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE core.station SET meteo_only = true WHERE code = 'T-1'"))
+
+    run_measurements(engine, now=NOW, fetch=fake_fetch())
+
+    with Session(engine) as session:
+        assert session.scalar(select(Station.meteo_only).where(Station.code == "T-1")) is False

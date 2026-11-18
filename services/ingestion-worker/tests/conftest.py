@@ -12,7 +12,7 @@ from ingestion_worker.boundaries.layers import (
     territory_records,
 )
 from shapely.geometry import box
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, make_url, select, text
 from sqlalchemy.orm import Session
 
 
@@ -57,6 +57,10 @@ def engine():
     url = os.environ.get("DATABASE_URL")
     if not url:
         pytest.skip("DATABASE_URL is not set")
+    # The cleanup below deletes the whole inventory: only ever on the database of the tests, which
+    # the plugin `testing` (packages/db/tests) points DATABASE_URL to.
+    if not (make_url(url).database or "").endswith("_test"):
+        pytest.skip("DATABASE_URL is not the database of the tests (run pytest from the root)")
     engine = create_engine(url)
     migrate(engine)
     with Session(engine) as session:
@@ -80,6 +84,9 @@ def engine():
         conn.execute(text("DELETE FROM core.municipality WHERE ine_code = '99001'"))
         conn.execute(text("DELETE FROM core.district WHERE code = '9901'"))
         conn.execute(text("DELETE FROM core.territory WHERE code = '99'"))
+        # The inventory is one dataset that a load replaces whole: the tests own all of it here.
+        conn.execute(text("DELETE FROM core.inventory_emission"))
+        conn.execute(text("DELETE FROM core.activity_sector"))
         conn.execute(text("DELETE FROM core.ingestion_run WHERE id > :id"), {"id": first_run or 0})
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         conn.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY core.unit_indicator"))

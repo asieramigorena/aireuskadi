@@ -22,6 +22,8 @@ export interface NewStation {
   municipality?: string;
   /** [longitude, latitude]; no geometry if it is null. */
   at?: [number, number] | null;
+  /** It only sends the weather (set by the worker). */
+  meteoOnly?: boolean;
 }
 
 /** Adds a station (and the municipality it is in) and gives back its id. */
@@ -30,8 +32,8 @@ export async function addStation(db: Db, station: NewStation): Promise<number> {
   await addMunicipality(db, municipality);
   const at = station.at === undefined ? [-2.935, 43.263] : station.at;
   const { rows } = await db.query<{ id: number }>(
-    `INSERT INTO core.station (municipality_code, code, name, area_type, geom)
-     VALUES ($1, $2, $3, $4, CASE WHEN $5::float8 IS NULL THEN NULL ELSE ST_SetSRID(ST_MakePoint($5::float8, $6::float8), 4326) END)
+    `INSERT INTO core.station (municipality_code, code, name, area_type, geom, meteo_only)
+     VALUES ($1, $2, $3, $4, CASE WHEN $5::float8 IS NULL THEN NULL ELSE ST_SetSRID(ST_MakePoint($5::float8, $6::float8), 4326) END, $7)
      RETURNING id`,
     [
       municipality,
@@ -40,6 +42,7 @@ export async function addStation(db: Db, station: NewStation): Promise<number> {
       station.areaType === undefined ? "urban" : station.areaType,
       at?.[0] ?? null,
       at?.[1] ?? null,
+      station.meteoOnly ?? false,
     ],
   );
   return rows[0].id;

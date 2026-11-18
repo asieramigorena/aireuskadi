@@ -5,7 +5,7 @@ import logging
 from aireuskadi_db import Measurement, Municipality, Pollutant, Station
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -100,3 +100,10 @@ def load_measurements(session: Session, records: list[MeasurementRecord]) -> lis
             )
         )
     return rejected
+
+
+def mark_meteo_only(session: Session, kinds: dict[str, bool]) -> None:
+    """Writes whether each station only sends the weather. A station that is not in `kinds` sent
+    nothing this time and keeps what it was. It does not commit."""
+    for code, meteo_only in kinds.items():
+        session.execute(update(Station).where(Station.code == code).values(meteo_only=meteo_only))

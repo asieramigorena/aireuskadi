@@ -44,6 +44,13 @@ class FacilityOut(BaseModel):
     emissions: list[FacilityEmissionOut]
 
 
+@router.get("/facilities/years")
+def facility_years(session: SessionDep) -> list[int]:
+    """The years that have emissions in the register, the oldest first: the years of the map."""
+    query = select(FacilityEmission.year).distinct().order_by(FacilityEmission.year)
+    return list(session.scalars(query))
+
+
 @router.get("/facilities/points", responses=INVALID_REQUEST)
 def facility_points(
     session: SessionDep,
