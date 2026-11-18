@@ -64,6 +64,25 @@ describe("the caption of the map", () => {
   test("says what is shown, with the label that the API does not give", () => {
     expect(mapCaption({ view: "emissions", pollutant: "NOX", year: 2023 })).toBe("Declared industrial emissions of NOX in 2023");
   });
+
+  test("the map of the emissions says the name of its pollutant once the API has given it, in the language of the page", () => {
+    const known = new Map([["SOX", "Oxides of sulphur (SOx)"]]);
+    expect(mapCaption({ view: "emissions", pollutant: "SOX", year: 2021 }, known)).toBe(
+      "Declared industrial emissions of oxides of sulphur (SOx) in 2021",
+    );
+
+    setLanguage("es");
+    expect(mapCaption({ view: "emissions", pollutant: "SOX", year: 2021 }, known)).toBe(
+      "Emisiones industriales declaradas de óxidos de azufre (SOx) en 2021",
+    );
+  });
+
+  test("in Spanish and Basque the name is in the dictionary: it is said before the API answers", () => {
+    setLanguage("es");
+    expect(mapCaption({ view: "emissions", pollutant: "NOX", year: 2023 })).toBe(
+      "Emisiones industriales declaradas de óxidos de nitrógeno (NOx) en 2023",
+    );
+  });
 });
 
 describe("what is said when a call fails", () => {

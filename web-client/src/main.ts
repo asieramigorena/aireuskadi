@@ -134,6 +134,12 @@ async function loadMap() {
     } else {
       [points, units] = await Promise.all([api.points(selection!, signal), cachedUnits(signal)]);
       stations = null;
+      // Not an error: no facility declared the pollutant that year. Said, so the map is not just empty.
+      if (points.length === 0) {
+        say(() => texts().noDataForSelection);
+        draw();
+        return;
+      }
     }
     say(() => "");
     draw();
@@ -248,7 +254,7 @@ function onState(state: State) {
   }
   if (dataChanged || languageChanged) {
     // Everything that is written is written again, in the language and for the map that is shown.
-    element("caption").textContent = mapCaption(selection);
+    element("caption").textContent = mapCaption(selection, pollutantNames());
     applyPageTexts(selection.view, stations?.attribution ?? null);
     line.refresh();
     legendShown = "";
@@ -289,12 +295,20 @@ window.addEventListener("resize", fitMapToPanel);
 const router = createRouter(window, onState);
 router.start();
 
-// The years and the pollutants come once; until they do (or if they cannot be asked) there is no
-// selector of them, and what the address says is still what is shown.
-void Promise.all([api.years(), api.pollutants()]).then(
-  ([years, pollutants]) => {
-    choices = { years, pollutants };
-    if (lastState) drawControls(lastState, language());
-  },
-  () => {},
-);
+/** The names of the pollutants of the emissions that the API gave, by code. A function and not a
+ * `const`: onState uses it before this line of the file is reached (router.start() runs above). */
+function pollutantNames() {
+  return new Map(choices.pollutants.map((pollutant) => [pollutant.code, pollutant.name]));
+}
+
+// The years and the pollutants come once, each on its own: until one comes (or if it cannot be
+// asked) there is no selector of it, and what the address says is still what is shown.
+void Promise.allSettled([api.years(), api.pollutants()]).then(([years, pollutants]) => {
+  choices = {
+    years: years.status === "fulfilled" ? years.value : [],
+    pollutants: pollutants.status === "fulfilled" ? pollutants.value : [],
+  };
+  if (!lastState) return;
+  drawControls(lastState, language());
+  element("caption").textContent = mapCaption(lastState.selection, pollutantNames());
+});
