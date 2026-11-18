@@ -1,0 +1,27 @@
+# Runs deploy/update.sh once: makes the folder a copy of `pro` and, if it has a new commit, deploys
+# it (images, migrations, the files that the services mount). The timer
+# aireuskadi-update.timer runs it every five minutes. To install it, on the VM, in the folder of
+# the repository (once; again only if update.sh, this file or the timer change):
+#   sudo install -m 755 -o root -g root deploy/update.sh /usr/local/sbin/aireuskadi-update
+#   sudo cp deploy/aireuskadi-update.service deploy/aireuskadi-update.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now aireuskadi-update.timer
+# Like aireuskadi.service, the script is installed in a folder of root and not run from the
+# repository: it runs as root, and a script that the user `ubuntu` can write would be root for any
+# process of that user. What it did: `journalctl -u aireuskadi-update`. This is the one thing that
+# stays by hand: when update.sh, this file, the timer, fetch-secrets.sh or aireuskadi.service change,
+# install them again. Whoever can merge into pro can run anything on the VM through this script.
+[Unit]
+Description=AirEuskadi: bring the VM up to date with the branch pro
+After=aireuskadi.service docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+NoNewPrivileges=yes
+PrivateTmp=yes
+# /var/lib/aireuskadi, where update.sh writes the last commit that it deployed.
+StateDirectory=aireuskadi
+ExecStart=/usr/local/sbin/aireuskadi-update
+TimeoutStartSec=900

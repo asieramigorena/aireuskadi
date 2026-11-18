@@ -7,8 +7,8 @@
 #     repository as context (the Python services share packages/ and uv.lock, and the gateway
 #     compiles web-client), named after the folder (services/api-gateway/gateway.Dockerfile ->
 #     aireuskadi-api-gateway).
-# Nothing connects to the server: Watchtower on the Oracle VM pulls the new :pro
-# images and restarts the containers. With no Dockerfile yet, the run just reports it.
+# Nothing connects to the server: a timer on the Oracle VM (deploy/update.sh) pulls the new :pro
+# images and starts what changed. With no Dockerfile yet, the run just reports it.
 # promote.yml calls this workflow with the commit of a pull request, to publish the images
 # before the pull request is merged into pro.
 name: Deploy (pro)
@@ -42,7 +42,7 @@ jobs:
   discover:
     # A manual run only counts on the branch pro, which is protected (pull request, CI, promote). Run
     # from another branch, for example dev, which is not protected, it would publish :pro and
-    # Watchtower would deploy it without any of that. The other triggers are not affected: a push to
+    # the VM would deploy it without any of that. The other triggers are not affected: a push to
     # pro, and the call of promote.yml (whose event is the one of its own caller).
     if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/pro'
     runs-on: ubuntu-latest

@@ -78,6 +78,15 @@ describe("the calls go only to the gateway, to the routes of /api/v1", () => {
     expect(Object.fromEntries(url.searchParams)).toEqual({ pollutant: "NOX", classification: "NFR" });
   });
 
+  test("the pollutants of the register that have emissions", async () => {
+    const list = [{ code: "NOX", name: "Oxides of nitrogen (NOx)" }];
+    const { api, fetchFn } = apiWith(answer(list));
+
+    expect(await api.pollutants()).toEqual(list);
+
+    expect(urlOf(fetchFn).pathname).toBe("/api/v1/facilities/pollutants");
+  });
+
   test("the card of one unit", async () => {
     const card = { code: "01036", level: "municipality", name: "Laudio", emissions: [] };
     const { api, fetchFn } = apiWith(answer(card));

@@ -91,6 +91,11 @@ async def facility_years(request: Request):
     return await ask(request, "emissions", "/facilities/years")
 
 
+@router.get("/facilities/pollutants")
+async def facility_pollutants(request: Request):
+    return await ask(request, "emissions", "/facilities/pollutants")
+
+
 @router.get("/facilities/points")
 async def facility_points(request: Request):
     return await ask(request, "emissions", "/facilities/points", ("pollutant", "year"))

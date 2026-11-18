@@ -1,7 +1,7 @@
 // The calls to the gateway. It is the only place that knows the routes, and the only way out of the
 // page: a relative URL, so that every call goes to the site that served the page and never to
 // another one.
-import type { BoundaryCollection, Inventory, Level, Point, StationCollection, UnitCard, UnitIndicators } from "./types";
+import type { BoundaryCollection, Inventory, Level, Point, PollutantName, StationCollection, UnitCard, UnitIndicators } from "./types";
 import { errorText } from "./format";
 import { texts } from "./i18n";
 import type { Selection } from "./router";
@@ -60,6 +60,8 @@ export function createApi(fetchFn: typeof fetch = (...args) => fetch(...args)) {
     unit: (code: string, signal?: AbortSignal) => get<UnitCard>(`/units/${encodeURIComponent(code)}`, {}, signal),
     /** The years that have emissions in the register, the oldest first: the years of the map. */
     years: (signal?: AbortSignal) => get<number[]>("/facilities/years", {}, signal),
+    /** The pollutants that have emissions in the register: the pollutants of the map. */
+    pollutants: (signal?: AbortSignal) => get<PollutantName[]>("/facilities/pollutants", {}, signal),
     /** The trend of a pollutant in the inventory, by the sectors of a classification. */
     inventory: (pollutant: string, classification: string, signal?: AbortSignal) =>
       get<Inventory>("/inventory", { pollutant, classification }, signal),

@@ -1,0 +1,74 @@
+# Alert rules of Grafana, as code like the dashboards (provisioned at start, read only in Grafana).
+# They watch the ingestion worker, which is not a server and has no /health: what says that it is
+# well is that it keeps loading. Both read the log lines that every load writes (common/runs.py):
+# "run finished" with its source, or "run failed" with the error.
+# Without a contact point they are seen in Grafana (Alerting > Alert rules), not sent anywhere.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: ingestion
+    folder: AirEuskadi
+    interval: 5m
+    rules:
+      # The measurements are loaded every hour: three hours without one finished means that the
+      # scheduler is stopped, or that every load fails.
+      - uid: no-measurements-3h
+        title: No measurements in 3 hours
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: { from: 10800, to: 0 }
+            datasourceUid: loki
+            model:
+              refId: A
+              queryType: instant
+              expr: 'sum(count_over_time({service=~"ingestion-scheduler|ingestion-worker"} | json | message="run finished" | source="measurements" [3h]))'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+        # No line at all in three hours is the case to warn about, not a missing answer.
+        noDataState: Alerting
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: No load of the measurements finished in the last 3 hours.
+          description: Look at the scheduler (docker compose ps) and at the dashboard Ingestion.
+        labels:
+          severity: warning
+
+      # A load that fails, for example because a file changed its layout (the parsers refuse it
+      # and the run is recorded as failed, with the reason).
+      - uid: load-failed
+        title: A load failed
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: loki
+            model:
+              refId: A
+              queryType: instant
+              expr: 'sum(count_over_time({service=~"ingestion-scheduler|ingestion-worker"} | json | message="run failed" [1h]))'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        # No failed line in the last hour is the good case.
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: A load of the worker failed in the last hour.
+          description: The error is in the line "run failed" (dashboard Ingestion) and in core.ingestion_run.
+        labels:
+          severity: warning

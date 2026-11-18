@@ -14,9 +14,13 @@ from fastapi import FastAPI
 
 from api_gateway import admin, grafana, routes
 from api_gateway.cache import Cache
+from api_gateway.rate_limit import RateLimit, install_rate_limit
 from api_gateway.web import web_router
 
 PREFIX = "/api/v1"
+# A page of the map makes about six calls when it opens, and a few more each time the zoom, the
+# pollutant or the year changes: 120 a minute is far more than a person needs, and stops a script.
+REQUESTS_PER_MINUTE = 120
 
 
 def create_app(
@@ -28,6 +32,7 @@ def create_app(
     web_dir: Path | None = None,
     auth_client: httpx.AsyncClient | None = None,
     grafana_client: httpx.AsyncClient | None = None,
+    rate_limit: RateLimit | None = None,
 ) -> FastAPI:
     """`emissions` and `air_quality` are the clients of the two services of the API, and
     `cache` the one of Redis (none: every question goes to the service). The
@@ -35,7 +40,8 @@ def create_app(
     /openapi.json are only there if asked. `web_dir` is the folder of the compiled web page;
     without it the gateway publishes only the API (in development the page comes from Vite).
     `auth_client` is the client of the auth service, which makes the admin pages: without it
-    /admin does not exist. With `grafana_client` too, admins see Grafana at /grafana/."""
+    /admin does not exist. With `grafana_client` too, admins see Grafana at /grafana/.
+    `rate_limit` is how many requests a person can make each minute (none: no limit)."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -67,6 +73,9 @@ def create_app(
     app.state.air_quality = air_quality
     app.state.cache = cache
     install_problem_documents(app)
+    # Before the request log, so that the log sees the requests that the limit stops (a 429).
+    if rate_limit:
+        install_rate_limit(app, rate_limit)
     # The checks of the compose come every few seconds: they are only in the log at DEBUG.
     install_request_log(app, "api_gateway.access", quiet_paths=(routes.HEALTH_PATH,))
     app.include_router(routes.health)
@@ -123,6 +132,7 @@ def app_from_env() -> FastAPI:
             timeout=httpx.Timeout(30.0, connect=3.0),
             follow_redirects=False,
         ),
+        rate_limit=RateLimit(limit=REQUESTS_PER_MINUTE),
     )
 
 

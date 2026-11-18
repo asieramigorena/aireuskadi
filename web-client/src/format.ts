@@ -36,9 +36,15 @@ function lowerFirst(name: string): string {
     : name;
 }
 
-/** What the map shows. The API has no field for it: the label is written here. */
-export function mapCaption(selection: Selection): string {
-  if (selection.view === "emissions") return texts().captionEmissions(selection.pollutant, selection.year);
+/** What the map shows. The API has no field for it: the label is written here. The name of a
+ * pollutant of the emissions comes from the dictionary of the language, else from `known` (the names
+ * that the API gave, GET /facilities/pollutants: English has no dictionary of them), else the code
+ * is said. */
+export function mapCaption(selection: Selection, known?: ReadonlyMap<string, string>): string {
+  if (selection.view === "emissions") {
+    const name = lowerFirst(emissionName(selection.pollutant, known?.get(selection.pollutant) ?? selection.pollutant));
+    return texts().captionEmissions(name, selection.year);
+  }
   // A code that has no name ("H2S") is left as it is.
   const name = airPollutantName(selection.pollutant);
   return texts().captionAir(name === selection.pollutant ? name : lowerFirst(name));

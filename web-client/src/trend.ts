@@ -156,10 +156,12 @@ export function trendSection(
 }
 
 /** The split of the last year in words, for whoever does not see the chart: a table that is read
- * aloud but not shown. */
-function lastYearTable(sectors: TrendSeries["sectors"], year: number, index: number): HTMLTableElement {
+ * aloud but not shown. It goes inside a box that is not seen: a table hidden by itself still showed
+ * its caption in some browsers, and the tables of the panel have a width of their own. */
+function lastYearTable(sectors: TrendSeries["sectors"], year: number, index: number): HTMLDivElement {
+  const hidden = document.createElement("div");
+  hidden.className = "visually-hidden";
   const table = document.createElement("table");
-  table.className = "visually-hidden";
   const caption = document.createElement("caption");
   caption.textContent = texts().trendTableCaption(year);
   const body = document.createElement("tbody");
@@ -174,7 +176,8 @@ function lastYearTable(sectors: TrendSeries["sectors"], year: number, index: num
     body.append(row);
   }
   table.append(caption, body);
-  return table;
+  hidden.append(table);
+  return hidden;
 }
 
 // One colour per sector, enough for the 11 SNAP ones: each one at least 3:1 against the pale panel,

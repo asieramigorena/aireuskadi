@@ -27,6 +27,7 @@ export const en: Texts = {
   viewAir: "Air quality",
   airPollutantLabel: "Pollutant of the air quality",
   yearLabel: "Year",
+  emissionPollutantLabel: "Pollutant of the emissions",
   mapLabelEmissions: "3D map of the declared industrial emissions of the Basque Country",
   mapLabelAir: "3D map of the latest air quality measured at the stations of the Basque Country",
   captionEmissions: (pollutant, year) => `Declared industrial emissions of ${pollutant} in ${year}`,

@@ -147,7 +147,7 @@ describe("the selector of the pollutant of the air quality", () => {
 describe("the selector of the year of the emissions", () => {
   const YEARS = [2019, 2020, 2021, 2022, 2023];
   const showYears = (selection: Selection, unit: string | null = null) =>
-    renderControls(root, selection, unit, navigate, null, YEARS);
+    renderControls(root, selection, unit, navigate, null, { years: YEARS, pollutants: [] });
 
   test("is only there in the map of the emissions: the air quality is the latest value, it has no year", () => {
     showYears(air());
@@ -182,6 +182,58 @@ describe("the selector of the year of the emissions", () => {
     show(emissions);
 
     expect(select()).toBeNull();
+  });
+});
+
+describe("the selector of the pollutant of the emissions", () => {
+  const POLLUTANTS = [
+    { code: "SOX", name: "Oxides of sulphur (SOx)" },
+    { code: "NOX", name: "Oxides of nitrogen (NOx)" },
+    { code: "CO2", name: "Carbon dioxide" },
+  ];
+  const showPollutants = (selection: Selection, unit: string | null = null) =>
+    renderControls(root, selection, unit, navigate, null, { years: [], pollutants: POLLUTANTS });
+  const pollutantSelect = () => root.querySelector<HTMLSelectElement>("select.emission-pollutant");
+
+  test("is only in the map of the emissions: the air quality has its own pollutants", () => {
+    showPollutants(air());
+    expect(pollutantSelect()).toBeNull();
+
+    showPollutants(emissions);
+    expect(pollutantSelect()?.value).toBe("NOX");
+    expect(pollutantSelect()?.getAttribute("aria-label")).toBe("Pollutant of the emissions");
+  });
+
+  test("has the pollutants with emissions, by their name in the language of the page", () => {
+    showPollutants(emissions);
+    expect([...(pollutantSelect()?.options ?? [])].map((option) => [option.value, option.textContent])).toEqual([
+      ["CO2", "Carbon dioxide"],
+      ["NOX", "Oxides of nitrogen (NOx)"],
+      ["SOX", "Oxides of sulphur (SOx)"],
+    ]);
+
+    setLanguage("es");
+    showPollutants(emissions);
+    expect([...(pollutantSelect()?.options ?? [])].map((option) => option.textContent)).toEqual([
+      "Dióxido de carbono",
+      "Óxidos de azufre (SOx)",
+      "Óxidos de nitrógeno (NOx)",
+    ]);
+    setLanguage("en");
+  });
+
+  test("choosing another one navigates to its map, and keeps the year and the unit that is open", () => {
+    showPollutants({ ...emissions, year: 2021 }, "48020");
+    (pollutantSelect() as HTMLSelectElement).value = "SOX";
+    pollutantSelect()?.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(navigate).toHaveBeenLastCalledWith("/unit/48020?pollutant=SOX&year=2021");
+  });
+
+  test("a pollutant that the address says and that is not in the list is still the one that is shown", () => {
+    showPollutants({ ...emissions, pollutant: "HCB" });
+
+    expect(pollutantSelect()?.value).toBe("HCB");
   });
 });
 

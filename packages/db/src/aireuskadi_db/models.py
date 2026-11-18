@@ -16,6 +16,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     SmallInteger,
@@ -217,6 +218,9 @@ class Measurement(Base):
     gives the hourly value of CO and O3 and also their 8-hour running mean."""
 
     __tablename__ = "measurement"
+    # The time is asked on its own (the latest values, a year): a BRIN index is tiny and enough,
+    # because the rows are written in the order of their time (migration 0005).
+    __table_args__ = (Index("ix_measurement_ts_brin", "ts", postgresql_using="brin"),)
 
     station_id: Mapped[int] = mapped_column(ForeignKey("station.id"), primary_key=True)
     pollutant_code: Mapped[str] = mapped_column(ForeignKey("pollutant.code"), primary_key=True)

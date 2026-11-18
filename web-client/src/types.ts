@@ -142,3 +142,9 @@ export interface Inventory {
   classification: string;
   series: { sector: { code: string; name: string }; year: number; value: number }[];
 }
+
+/** A pollutant of the register that has emissions (GET /facilities/pollutants). */
+export interface PollutantName {
+  code: string;
+  name: string;
+}
