@@ -114,7 +114,9 @@ describe("the words of the chart", () => {
   test("a table that is not seen says the tonnes of each sector in the last year", () => {
     show(inventory());
 
-    const table = root.querySelector("table.visually-hidden");
+    // Inside a box that is not seen: the box hides all of it, the caption too (a hidden table alone
+    // still showed its caption in some browsers, over the rest of the panel).
+    const table = root.querySelector(".visually-hidden > table");
     expect(table?.querySelector("caption")?.textContent).toBe("Tonnes by sector in 1991");
     expect([...(table?.querySelectorAll("tbody tr") ?? [])].map((row) => row.textContent)).toEqual([
       "Combustion in energy and transformation industries80 t",
