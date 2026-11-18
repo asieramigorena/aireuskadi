@@ -4,7 +4,7 @@ import re
 from datetime import datetime, timedelta
 
 from aireuskadi_db import IngestionRun
-from fakes import FILE, fake_fetch
+from fakes import FILE, fake_fetch, inventory_fetch, inventory_files
 from fakes import fetch as boundaries_fetch
 from ingestion_worker.main import main
 from sqlalchemy import select
@@ -51,3 +51,14 @@ def test_the_hours_option_sets_how_far_back_the_values_are_read(engine, boundari
         for part in re.search(r"/from/(.+)/to/(.+)", requested[1]).groups()
     )
     assert timedelta(hours=6) <= end - start < timedelta(hours=7)  # from the hour, 6 h back
+
+
+def test_the_inventory_command_loads_the_edition_it_is_given_even_if_it_has_not_changed(engine):
+    fetch = inventory_fetch(inventory_files())
+    main(["inventory", "--year", "1991"], engine=engine, fetch=fetch)
+
+    main(["inventory", "--year", "1991"], engine=engine, fetch=fetch)
+
+    run = last_run(engine)
+    assert (run.source, run.status) == ("inventory", "succeeded")
+    assert run.rows_loaded > 0
