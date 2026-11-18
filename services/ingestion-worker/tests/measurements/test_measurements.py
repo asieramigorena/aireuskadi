@@ -176,3 +176,28 @@ def test_rows_read_counts_the_values_that_are_tried_not_the_ones_that_are_not_da
 
     assert (len(result.accepted), len(result.rejected), result.skipped) == (1, 1, 3)
     assert result.rows_read == 2
+
+
+# --- Which stations only send the weather
+
+
+def test_a_station_that_sends_only_weather_is_meteorological():
+    text = hours(("2026-11-01T10:00:00Z", [station("201", value("P", 1019.2), value("H", 80))]))
+
+    assert parse_measurements(text).meteo_only == {"201": True}
+
+
+def test_a_station_that_sends_a_pollutant_without_data_is_not_meteorological():
+    no2 = value("NO2", 0.0, airquality="Sin datos")
+    text = hours(("2026-11-01T10:00:00Z", [station("68", no2, qualification="Sin datos")]))
+
+    assert parse_measurements(text).meteo_only == {"68": False}
+
+
+def test_one_hour_with_a_pollutant_is_enough_to_not_be_meteorological():
+    text = hours(
+        ("2026-11-01T10:00:00Z", [station("211", value("P", 1019.2))]),
+        ("2026-11-01T11:00:00Z", [station("211", value("NO2", 18.0), qualification=None)]),
+    )
+
+    assert parse_measurements(text).meteo_only == {"211": False}

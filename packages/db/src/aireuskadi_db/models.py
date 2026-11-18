@@ -199,6 +199,13 @@ class Station(Base):
     name: Mapped[str] = mapped_column(String(200))
     area_type: Mapped[str | None] = mapped_column(String(50), comment="urban, suburban, rural...")
     geom = mapped_column(Geometry("POINT", srid=SRID))
+    # Set by the worker from what the station sends (see measurements/parse.py).
+    meteo_only: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="false",
+        comment="it only sends the weather, never a pollutant",
+    )
 
     municipality: Mapped[Municipality] = relationship(back_populates="stations")
     measurements: Mapped[list["Measurement"]] = relationship(back_populates="station")

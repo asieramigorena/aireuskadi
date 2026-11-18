@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from ingestion_worker.common.download import download
 from ingestion_worker.common.runs import track_run
 from ingestion_worker.common.view import refresh_unit_indicator
-from ingestion_worker.measurements.load import load_measurements, load_stations
+from ingestion_worker.measurements.load import load_measurements, load_stations, mark_meteo_only
 from ingestion_worker.measurements.parse import parse_measurements
 from ingestion_worker.measurements.stations import parse_stations
 
@@ -52,7 +52,7 @@ def run_measurements(
         stations_left_out = load_stations(session, stations.accepted)
 
         files = [stations_file]
-        values, tried, rejected_parsing = [], 0, 0
+        values, tried, rejected_parsing, kinds = [], 0, 0, {}
         for county in COUNTIES:
             file = fetch(HOURLY.format(county=county, start=start, end=end))
             files.append(file)
@@ -60,7 +60,9 @@ def run_measurements(
             values += parsed.accepted
             tried += parsed.rows_read
             rejected_parsing += len(parsed.rejected)
+            kinds.update(parsed.meteo_only)  # each station is in one county only
         values_left_out = load_measurements(session, values)
+        mark_meteo_only(session, kinds)
 
         run.file_hash = hashlib.sha256(b"".join(files)).hexdigest()
         run.rows_read = len(stations.accepted) + len(stations.rejected) + tried
