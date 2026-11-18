@@ -341,6 +341,7 @@ services:
     volumes:
       - ./observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - ./observability/grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./observability/grafana-alerts.yml:/etc/grafana/provisioning/alerting/alerts.yml:ro
       - ./observability/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     # No published port: only the gateway reaches it.
