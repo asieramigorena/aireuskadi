@@ -7,19 +7,19 @@
 #   cp .env.prod.example .env      # only what is not secret. The PASSWORDS are in the OCI Vault: the
 #                                  # unit deploy/aireuskadi.service reads them (deploy/fetch-secrets.sh,
 #                                  # into memory) and starts the stack; its header says how to install it
-#   docker login ghcr.io           # only if the packages of the images are private: with a token that
+#   sudo docker login ghcr.io      # only if the packages of the images are private (root pulls them): with a token that
 #                                  # can only read packages. Public packages need no login
 #   tunnel/serve.json              # needed only for the tunnel (it comes with the repository; chmod 644 it):
 #                                  # set COMPOSE_PROFILES=tunnel in .env to turn it on; the key TS_AUTHKEY
 #                                  # is the secret aireuskadi-tailscale-authkey of the Vault
 #   docker compose --env-file .env --env-file /run/aireuskadi/secrets.env -f docker-compose.prod.yml up -d
 #                                  # what the unit does; by hand, only after fetch-secrets.sh has run
-# Watchtower asks every five minutes for a new :pro image of the five application services and
-# restarts them. The database is not updated by it: a new image of PostgreSQL can change the format
-# of the data, so that one is changed by hand.
-# db-init runs at each `docker compose up -d`, not when Watchtower updates a service: after a release that
-# changes the schema (a new column, a view that is not replaced by itself), run `docker compose -f
-# docker-compose.prod.yml up -d` by hand so that db-init runs again before the new code needs it.
+# Updates: every five minutes the timer deploy/aireuskadi-update.timer runs deploy/update.sh. When
+# the branch pro has a commit that was not deployed, it makes the folder a copy of it, pulls the :pro
+# images (not the database), runs `up -d` (only what changed is recreated, and db-init runs first,
+# so a new migration is applied before the new code needs it) and recreates the services whose
+# mounted files changed. Nothing connects to the VM to deploy. Whoever can merge into pro can run
+# anything on the VM this way: pro only takes reviewed pull requests.
 #
 # To try it on the laptop with images that were built there, without touching the development
 # stack: IMAGE_TAG=<the tag you gave them> docker compose -p other-name -f docker-compose.prod.yml ...
@@ -34,9 +34,6 @@ x-logging: &logging
 x-application: &application
   restart: unless-stopped
   logging: *logging
-  labels:
-    # Watchtower only updates what has this label.
-    com.centurylinklabs.watchtower.enable: "true"
 
 services:
   postgres:
@@ -180,21 +177,6 @@ services:
       db-init:
         condition: service_completed_successfully
 
-  # Updates the five services above when a new :pro image appears. It is the maintained fork:
-  # the original containrrr/watchtower was archived in December 2025 and does not work with
-  # Docker 29 or later. If the images are private it reads the token of GHCR from the docker login
-  # of the VM; with public images it needs none.
-  watchtower:
-    image: nickfedor/watchtower:latest
-    command: ["--interval", "300", "--label-enable", "--cleanup"]
-    environment:
-      DOCKER_CONFIG: /config
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ${DOCKER_CONFIG_DIR:-/root/.docker}:/config:ro
-    restart: unless-stopped
-    logging: *logging
-
   # The way in: Tailscale Funnel (issue #11). It opens only an outbound connection, publishes no port
   # and shows ONLY the gateway. It is optional: it starts only with COMPOSE_PROFILES=tunnel in .env,
   # and needs the folder tunnel/ (serve.json) next to this file and TS_AUTHKEY (from the Vault) for the first start. If
@@ -232,7 +214,8 @@ services:
   # and the metrics (state, CPU, memory...) to Prometheus; Grafana shows both. They are on the
   # network `monitoring` only, which the gateway shares with them and nothing else does: Grafana
   # trusts the user that the gateway names (auth proxy), so nothing else may reach it.
-  # The same as in docker-compose.yml. The images are pinned, so Watchtower does not update them.
+  # The same as in docker-compose.yml. The images are pinned: a new version comes only when this
+  # file names it.
   loki:
     image: grafana/loki:3.5.7
     command: -config.file=/etc/loki/config.yml
