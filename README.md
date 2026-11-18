@@ -20,47 +20,66 @@ It is published at <https://aireuskadi.taila95ab4.ts.net>.
 
 ## Run it locally
 
-Requirements: [uv](https://docs.astral.sh/uv/), Node.js 22 or later, Docker with Compose.
+Requirements: Docker with Compose.
 
 ```sh
-# Settings: copy the example and set your own passwords and a JWT_SECRET
-cp .env.example .env
-
-# Database and Redis
-docker compose up -d --wait postgres redis
-
-# Python components, the schema (its migrations) and the roles of the services
-uv sync --all-packages
-uv run --env-file .env aireuskadi-db-init
-
-# An admin account (asks the password), named like GRAFANA_ADMIN_USER of .env
-uv run --env-file .env aireuskadi-admin add <name>
-uv run --env-file .env aireuskadi-admin promote <name>
-
-# Data: the boundaries first, then the E-PRTR register of one year and the last hours of
-# measurements (all safe to repeat)
-uv run --env-file .env python -m ingestion_worker.main boundaries
-uv run --env-file .env python -m ingestion_worker.main eprtr --year 2023
-uv run --env-file .env python -m ingestion_worker.main measurements --hours 48
-
-# The rest of the services
-docker compose up -d
-
-# The web page
-(cd web-client && npm ci && npm run dev)
+cp .env.example .env    # then set your own passwords and a JWT_SECRET (see below)
+docker compose --profile worker up -d --build
 ```
 
-The web page is on <http://localhost:5173> while you work on it, and compiled, as it is published,
-on <http://127.0.0.1:8080> (rebuild it with `docker compose up -d --build api-gateway`).
+That starts everything: PostgreSQL, Redis, the services, the gateway with the web page, the logs and
+metrics (Loki, Alloy, Prometheus, Grafana) and the scheduler, which loads the data in its first
+minute (boundaries, E-PRTR register, the last 48 hours of measurements and the inventory) and keeps it
+up to date. The page and the API (`/api/v1/`) are on <http://127.0.0.1:8080> (`GATEWAY_PORT` of `.env`).
 
-The API is on <http://127.0.0.1:8080/api/v1/> (the gateway, `GATEWAY_PORT` of `.env`).
-Grafana, with the logs and the state of the services, is on <http://127.0.0.1:8080/admin>: log in
-with an admin account. Admins make other accounts admins at `/admin/users`.
+The database passwords go inside a URL, so use letters, digits, `-` and `_` only. One way to make
+each password, and the `JWT_SECRET` (at least 32 characters), is:
 
-Optional: to show your own copy on the internet, `tunnel/` has a Tailscale Funnel that publishes only
-the gateway. Put an auth key in `TS_AUTHKEY` of `.env` and run
+```sh
+openssl rand -base64 24 | tr '+/' '-_' | tr -d '='    # a password
+openssl rand -base64 48 | tr '+/' '-_' | tr -d '='    # JWT_SECRET
+```
+
+### More or less
+
+An admin account, to see Grafana at <http://127.0.0.1:8080/admin> (it asks the password; name it
+like `GRAFANA_ADMIN_USER` of `.env`). Admins make other accounts admins at `/admin/users`:
+
+```sh
+docker compose run --rm --entrypoint aireuskadi-admin db-init add <name>
+docker compose run --rm --entrypoint aireuskadi-admin db-init promote <name>
+```
+
+Without the scheduler, and the loads one by one when you want them (the boundaries first):
+
+```sh
+docker compose up -d --build
+docker compose run --rm --build ingestion-worker boundaries
+docker compose run --rm --build ingestion-worker eprtr --year 2023
+docker compose run --rm --build ingestion-worker measurements --hours 48
+docker compose run --rm --build ingestion-worker inventory
+```
+
+Without the logs and metrics (about 500 MB of memory less): `docker compose up -d --build api-gateway`.
+
+To work on the web page, with the stack running (needs Node.js 22 or later; it reloads on every
+change, on <http://localhost:5173>): `cd web-client && npm ci && npm run dev`. The page on port 8080 is the
+compiled one: `docker compose up -d --build api-gateway` shows the changes there.
+
+To work on the Python code without containers (needs [uv](https://docs.astral.sh/uv/); put the
+owner password in `DATABASE_URL` of `.env` too):
+
+```sh
+uv sync --all-packages
+uv run --env-file .env aireuskadi-db-init
+uv run --env-file .env python -m ingestion_worker.main boundaries
+```
+
+To show your own copy on the internet, `tunnel/` has a Tailscale Funnel that publishes only the
+gateway. Put an auth key in `TS_AUTHKEY` of `.env` and run
 `docker compose --profile tunnel up -d tunnel` (`docker compose stop tunnel` turns it off).
-Nothing else needs it.
+
+To stop it all: `docker compose --profile '*' down` (add `-v` to delete the data too).
 
 ## Credits
 
