@@ -40,6 +40,7 @@ export interface Texts {
   viewEmissions: string;
   viewAir: string;
   airPollutantLabel: string;
+  yearLabel: string;
   mapLabelEmissions: string;
   mapLabelAir: string;
   captionEmissions: (pollutant: string, year: number) => string;
@@ -64,7 +65,8 @@ export interface Texts {
   columns: { pollutant: string; declared: string; perKm2: string; guideline: string; latest: string };
   airQuality: string;
   airUnavailable: string;
-  noValues: string;
+  meteoStation: string;
+  noRecentReadings: string;
   latestValue: (hour: string) => string;
   noMeasurement: { no_station: string; no_data: string; level_not_supported: string; other: string };
 
@@ -82,4 +84,19 @@ export interface Texts {
   // the emissions): the other languages name each code, and the API name is the fallback.
   airPollutants: Record<AirCode, string>;
   pollutants: Record<string, string>;
+  // The trend of the inventory (GET /inventory).
+  trendLink: string;
+  trendTableCaption: (year: number) => string;
+  trendTitle: (pollutant: string, from: number, to: number) => string;
+  trendSummary: (first: string, from: number, last: string, to: number) => string;
+  inventoryPollutantLabel: string;
+  sectorsLabel: string;
+  methaneTotalOnly: string;
+  noInventory: string;
+  nfrParticlesNote: string;
+  /** The names of the pollutants of the inventory. */
+  inventoryPollutants: Record<string, string>;
+  /** The names of the sectors, by classification and code ("SNAP-07", "NFR-1"); a sector that is not
+   * here keeps the name of the source (in Spanish). */
+  sectors: Record<string, string>;
 }

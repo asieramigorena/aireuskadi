@@ -427,6 +427,65 @@ body {
   color: #4a5f66;
 }
 
+/* The trend of the inventory in the panel: the choices, the chart and its notes. */
+#panel .trend select {
+  display: block;
+  width: 100%;
+  margin: 0 0 0.6rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--paper-line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+
+#panel .trend nav {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0 0 0.8rem;
+}
+
+#panel .trend a.sectors {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--paper-line);
+  border-radius: 999px;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+/* Like the switch of the maps: filled and bold, not only another colour. */
+#panel .trend a.sectors[aria-current="true"] {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+  font-weight: 650;
+}
+
+/* Chart.js fills its box: the box has the height (the chart keeps no proportion of its own). */
+#panel .trend .chart {
+  position: relative;
+  height: 24rem;
+}
+
+#panel .trend .note,
+#panel .trend .credit {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+  color: #4a5f66;
+}
+
+/* Read aloud but not shown: the words of the chart. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* The numbers of the emissions table stay in one line; the notes of this one ("0.6x the WHO
  * guideline (19 of 24 hours)") have to wrap, or the panel, which hides what overflows, cuts them. */
 #panel table.readings td {
@@ -454,6 +513,12 @@ body {
 
 /* A finger needs more room than a pointer. */
 @media (pointer: coarse) {
+  #panel .trend a.sectors {
+    min-height: 2.75rem;
+    display: inline-flex;
+    align-items: center;
+  }
+
   .admin-link {
     min-height: 2.75rem;
   }

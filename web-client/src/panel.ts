@@ -12,15 +12,18 @@ import {
   formatTonnes,
 } from "./format";
 import { texts } from "./i18n";
-import type { Selection } from "./router";
-import type { UnitAirQuality, UnitCard, UnitStation } from "./types";
+import type { Classification, Selection } from "./router";
+import { trendSection, trendTitle } from "./trend";
+import type { Inventory, UnitAirQuality, UnitCard, UnitStation } from "./types";
 
 export type PanelView =
   | { status: "closed" }
   | { status: "loading" }
   | { status: "error"; message: string }
   // `station` is the id of the station that the person chose on the map: it is shown open, at the top.
-  | { status: "card"; card: UnitCard; station?: number | null };
+  | { status: "card"; card: UnitCard; station?: number | null }
+  // The trend of the inventory; `inventory` is null when it has nothing of the pollutant.
+  | { status: "trend"; inventory: Inventory | null; classification: Classification };
 
 function element<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -103,10 +106,15 @@ function stationBlock(
   // The station of the map that was clicked: marked like the pollutant of the map in the emissions.
   if (chosen) block.setAttribute("aria-current", "true");
   block.append(element("summary", station.name));
-  if (station.readings.length === 0) {
-    block.append(element("p", texts().noValues, "none"));
+  // Compared with true and false: an older service that does not send them shows what it did.
+  if (station.meteo_only === true) {
+    block.append(element("p", texts().meteoStation, "none"));
     return block;
   }
+  if (station.readings.length === 0 || station.recent === false) {
+    block.append(element("p", texts().noRecentReadings, "none"));
+  }
+  if (station.readings.length === 0) return block;
   // A loop and not Math.max(...list): a list that is long enough cannot be spread.
   const newest = station.readings.reduce((latest, reading) => Math.max(latest, Date.parse(reading.ts)), -Infinity);
   block.append(element("p", texts().latestValue(formatHour(new Date(newest).toISOString())), "updated"));
@@ -175,6 +183,7 @@ export function renderPanel(
   view: PanelView,
   selection: Selection,
   onClose: () => void,
+  navigate: (url: string) => void,
 ): void {
   root.replaceChildren();
   root.hidden = view.status === "closed";
@@ -205,6 +214,12 @@ export function renderPanel(
       // The panel can be short (a phone) and the list long: the station that was chosen is brought
       // to the top of the panel, under the header that stays there (scroll-padding-top).
       airQuality.querySelector("details[aria-current='true']")?.scrollIntoView?.({ block: "start" });
+      return;
     }
+    case "trend":
+      root.append(
+        header(trendTitle(selection.pollutant, view.inventory), onClose),
+        trendSection(view.inventory, selection, view.classification, navigate),
+      );
   }
 }

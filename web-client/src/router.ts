@@ -8,7 +8,12 @@ import { isLanguage, type Language } from "./i18n";
 export type Route =
   | { name: "home" }
   | { name: "unit"; code: string; station: number | null }
+  // The trend of the inventory 1990-2024 in the panel, by SNAP sectors or by NFR ones.
+  | { name: "trend"; classification: Classification }
   | { name: "not-found" };
+
+/** The two ways of splitting the inventory into sectors. */
+export type Classification = "SNAP" | "NFR";
 
 /** The map of the declared emissions, or the map of the air quality that the stations measure. */
 export type View = "emissions" | "air";
@@ -43,7 +48,8 @@ const UNIT_PATH = /^\/unit\/([0-9]{2}|[0-9]{4}|[0-9]{5})$/;
 
 export function parseLocation(pathname: string, search: string): State {
   const query = new URLSearchParams(search);
-  const view: View = query.get("view") === "air" ? "air" : "emissions";
+  // The trend is of the inventory of emissions: the map behind it is always the one of the emissions.
+  const view: View = query.get("view") === "air" && pathname !== "/trend" ? "air" : "emissions";
   const pollutant = query.get("pollutant") ?? "";
   const year = query.get("year") ?? "";
   const lang = query.get("lang") ?? "";
@@ -56,6 +62,9 @@ export function parseLocation(pathname: string, search: string): State {
   };
 
   if (pathname === "/") return { route: { name: "home" }, selection };
+  if (pathname === "/trend") {
+    return { route: { name: "trend", classification: query.get("sectors") === "nfr" ? "NFR" : "SNAP" }, selection };
+  }
   const unit = UNIT_PATH.exec(pathname);
   if (unit) {
     const station = query.get("station") ?? "";
@@ -86,6 +95,17 @@ export function unitUrl(code: string, selection: Selection, station: number | nu
 }
 
 export const homeUrl = (selection: Selection) => `/${selectionQuery(selection)}`;
+
+/** The address of the trend of the inventory. The map behind it is the one of the emissions (the
+ * inventory is of emissions): from the air quality it starts with the emissions by default. */
+export function trendUrl(selection: Selection, classification: Classification): string {
+  const map: Selection =
+    selection.view === "emissions" ? selection : { ...DEFAULT_SELECTION, year: selection.year, lang: selection.lang };
+  const query = new URLSearchParams(selectionQuery(map));
+  if (classification === "NFR") query.set("sectors", "nfr");
+  const text = query.toString();
+  return `/trend${text ? `?${text}` : ""}`;
+}
 
 export function createRouter(win: Window, onChange: (state: State) => void) {
   const read = () => parseLocation(win.location.pathname, win.location.search);
