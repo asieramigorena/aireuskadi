@@ -82,7 +82,8 @@ def create_reader_role(engine: Engine, user: str, password: str) -> None:
 
 def create_auth_role(engine: Engine, user: str, password: str) -> None:
     """The role of the auth service: it reads the accounts (to log people in) and changes only
-    ``is_admin`` (an admin promotes another account). It cannot add or delete accounts, change a
+    ``is_admin`` (an admin promotes another account), and makes accounts of the sign-up (the name and
+    the password only, never ``is_admin``). It cannot delete accounts, change a
     password, or read anything of core. Safe to run again, like the reader role."""
     check_name_and_password(user, password)
 
@@ -111,6 +112,12 @@ def create_auth_role(engine: Engine, user: str, password: str) -> None:
             sql.SQL("REVOKE ALL ON SCHEMA {} FROM {}").format(sql.Identifier(SCHEMA), role),
             sql.SQL("GRANT USAGE ON SCHEMA {} TO {}").format(sql.Identifier(AUTH_SCHEMA), role),
             sql.SQL("GRANT SELECT, UPDATE (is_admin) ON {} TO {}").format(table, role),
+            # The sign-up: only the name and the password of a new account, never is_admin, so an
+            # account made by the site is never an admin (an admin is made by the owner's command).
+            sql.SQL("GRANT INSERT (username, hashed_password) ON {} TO {}").format(table, role),
+            sql.SQL("GRANT USAGE ON SEQUENCE {} TO {}").format(
+                sql.Identifier(AUTH_SCHEMA, "app_user_id_seq"), role
+            ),
         ]
         cursor = conn.connection.driver_connection.cursor()
         for statement in statements:
