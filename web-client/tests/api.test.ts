@@ -59,9 +59,10 @@ describe("the calls go only to the gateway, to the routes of /api/v1", () => {
     expect(Object.fromEntries(url.searchParams)).toEqual({ level: "territory" });
   });
 
-  test("the years of the register that have emissions", async () => {
-    const { api, fetchFn } = apiWith(answer([2019, 2020]));
+  test("the years of the register that have emissions, and only what can be a year", async () => {
+    const { api, fetchFn } = apiWith(answer([2019, 2020, "x", 2021.5, 0, 1e999, null]));
 
+    // The newest becomes the year of the map and goes in its addresses: never NaN or Infinity.
     expect(await api.years()).toEqual([2019, 2020]);
 
     expect(urlOf(fetchFn).pathname).toBe("/api/v1/facilities/years");

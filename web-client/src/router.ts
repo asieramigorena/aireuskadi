@@ -34,6 +34,14 @@ export interface State {
 
 export const DEFAULT_SELECTION: Selection = { view: "emissions", pollutant: "NOX", year: 2023 };
 
+// The year of the map when the address says none: the newest with emissions, once the API has said
+// which one it is (main.ts); until then the one of DEFAULT_SELECTION.
+let defaultYear = DEFAULT_SELECTION.year;
+
+export function setDefaultYear(year: number) {
+  defaultYear = year;
+}
+
 /** The pollutant of each view when the URL does not say one: the two do not measure the same. */
 export const DEFAULT_POLLUTANT: Record<View, string> = { emissions: "NOX", air: "NO2" };
 
@@ -56,7 +64,7 @@ export function parseLocation(pathname: string, search: string): State {
   const selection: Selection = {
     view,
     pollutant: POLLUTANT.test(pollutant) ? pollutant : DEFAULT_POLLUTANT[view],
-    year: YEAR.test(year) && Number(year) >= 1 ? Number(year) : DEFAULT_SELECTION.year,
+    year: YEAR.test(year) && Number(year) >= 1 ? Number(year) : defaultYear,
     // Only a language that the page has, and only when there is one: the key is not there otherwise.
     ...(isLanguage(lang) ? { lang } : {}),
   };
@@ -78,7 +86,7 @@ function selectionQuery(selection: Selection): string {
   if (selection.view === "air") query.set("view", "air");
   if (selection.pollutant !== DEFAULT_POLLUTANT[selection.view]) query.set("pollutant", selection.pollutant);
   // Only the emissions have a year.
-  if (selection.view === "emissions" && selection.year !== DEFAULT_SELECTION.year) {
+  if (selection.view === "emissions" && selection.year !== defaultYear) {
     query.set("year", String(selection.year));
   }
   if (selection.lang) query.set("lang", selection.lang);

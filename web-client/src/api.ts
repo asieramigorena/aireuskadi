@@ -8,6 +8,10 @@ import type { Selection } from "./router";
 
 const PREFIX = "/api/v1";
 
+/** A whole number from 1 to 9999, like the years that the address accepts (router.ts). */
+const isYear = (value: unknown): value is number =>
+  Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 9999;
+
 /** Something that went wrong with a call. `status` is 0 when the gateway could not be reached. */
 export class ApiError extends Error {
   // The message is fixed (for the log): what the service says is not kept, because it is in English
@@ -58,8 +62,10 @@ export function createApi(fetchFn: typeof fetch = (...args) => fetch(...args)) {
     stations: (pollutant: string, signal?: AbortSignal) =>
       get<StationCollection>("/stations/latest", { pollutant }, signal),
     unit: (code: string, signal?: AbortSignal) => get<UnitCard>(`/units/${encodeURIComponent(code)}`, {}, signal),
-    /** The years that have emissions in the register, the oldest first: the years of the map. */
-    years: (signal?: AbortSignal) => get<number[]>("/facilities/years", {}, signal),
+    /** The years that have emissions in the register, the oldest first: the years of the map. The
+     * newest becomes the year of the map and goes in its addresses, so only what can be a year. */
+    years: async (signal?: AbortSignal) =>
+      (await get<unknown[]>("/facilities/years", {}, signal)).filter(isYear),
     /** The pollutants that have emissions in the register: the pollutants of the map. */
     pollutants: (signal?: AbortSignal) => get<PollutantName[]>("/facilities/pollutants", {}, signal),
     /** The trend of a pollutant in the inventory, by the sectors of a classification. */

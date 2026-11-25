@@ -12,7 +12,7 @@ import { renderLegend } from "./legend";
 import { createMap } from "./map";
 import { applyPageTexts } from "./page";
 import { renderPanel, type PanelView } from "./panel";
-import { createRouter, homeUrl, unitUrl, type Classification, type Selection, type State } from "./router";
+import { createRouter, homeUrl, parseLocation, setDefaultYear, unitUrl, type Classification, type Selection, type State } from "./router";
 import { maxDensity } from "./scale";
 import type { BoundaryCollection, Level, Point, StationCollection, UnitCollection, UnitIndicators } from "./types";
 import { drawTrendChart, focusedTrendControl, loadTrend, restoreTrendFocus, trendSeries } from "./trend";
@@ -309,6 +309,13 @@ void Promise.allSettled([api.years(), api.pollutants()]).then(([years, pollutant
     pollutants: pollutants.status === "fulfilled" ? pollutants.value : [],
   };
   if (!lastState) return;
+  if (choices.years.length) {
+    // An address without a year shows the newest one: now that it is known, the address is read
+    // again. An address with a year says the same as before, and nothing is drawn again.
+    setDefaultYear(Math.max(...choices.years));
+    const again = parseLocation(window.location.pathname, window.location.search);
+    if (again.selection.year !== lastState.selection.year) onState(again);
+  }
   drawControls(lastState, language());
   element("caption").textContent = mapCaption(lastState.selection, pollutantNames());
 });
