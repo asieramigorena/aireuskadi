@@ -1,7 +1,8 @@
-"""The HTML of the admin pages: plain forms, no JavaScript and nothing loaded from elsewhere.
+"""The HTML of the pages of the accounts (log in, sign up, the account, the admin panel): plain
+forms, no JavaScript and nothing loaded from elsewhere.
 
-Written like page() of the course example fastapi-google-login: the HTML is a text in Python. What
-comes from the database goes through html.escape, so it cannot become HTML of the page.
+The HTML is a text in Python. What comes from the database goes through html.escape, so it cannot
+become HTML of the page.
 
 They look like the map (web-client/styles/style.css): the same night sea behind, the same pale
 panel for reading, the same round buttons and the same colours.
@@ -19,7 +20,8 @@ from auth_service.texts import TEXTS, language, with_language
 # site can show the page inside a frame.
 HEADERS = {
     "Content-Security-Policy": (
-        "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
+        "default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'self'; "
+        "frame-ancestors 'none'"
     ),
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
@@ -27,6 +29,12 @@ HEADERS = {
     # another site.
     "Referrer-Policy": "no-referrer",
 }
+
+# The icon of the tab: the same wind emoji as the map (web-client/index.html), an SVG in the page.
+ICON = (
+    '<link rel="icon" href="data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' '
+    "viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌬️</text></svg>\">"
+)
 
 # The colours and sizes of the map, copied from web-client/styles/style.css.
 STYLE = """
@@ -147,17 +155,17 @@ main :focus-visible { outline-color: var(--ink); }
 
 
 def nav(request: Request, user) -> str:
-    """The way around: back to the map always; Grafana and the accounts only for an admin; out
-    only for someone who is in. Nobody sees a door that they cannot open."""
+    """The way around: back to the map always; the panel and Grafana only for an admin; out only
+    for someone who is in. Nobody sees a door that they cannot open."""
     words = TEXTS[language(request)]
     links = f'<a href="{with_language("/", request)}">{words["map"]}</a>'
     if user and user.is_admin:
+        links += f'<a href="{with_language("/admin", request)}">{words["admin"]}</a>'
         # Grafana is not translated: its link is the same in every language.
         links += '<a href="/grafana/">Grafana</a>'
-        links += f'<a href="{with_language("/admin/users", request)}">{words["accounts"]}</a>'
     if user:
         links += (
-            f'<form method="post" action="{with_language("/admin/logout", request)}">'
+            f'<form method="post" action="{with_language("/user/logout", request)}">'
             f"<button>{words['log_out']}</button></form>"
         )
     return f"<nav>{links}</nav>"
@@ -167,7 +175,7 @@ def page(request: Request, title: str, body: str, user, wide: bool = False) -> H
     html = (
         f'<!doctype html><html lang="{language(request)}"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"<title>AirEuskadi: {title}</title><style>{STYLE}</style></head>"
+        f"<title>AirEuskadi: {title}</title>{ICON}<style>{STYLE}</style></head>"
         f'<body><p class="brand"><a href="{with_language("/", request)}">AirEuskadi</a></p>'
         f"<h1>{title}</h1>{nav(request, user)}"
         f"<main{' class="wide"' if wide else ''}>{body}</main></body></html>"
@@ -180,16 +188,56 @@ def login_page(request: Request, problem: str | None, user) -> HTMLResponse:
     "too_many"), or None."""
     words = TEXTS[language(request)]
     message = f'<p class="error">{words[problem]}</p>' if problem else ""
+    signup = f'<p><a href="{with_language("/user/signup", request)}">{words["no_account"]}</a></p>'
     return page(
         request,
-        words["admin"],
+        words["log_in"],
         f"""{message}
-<form method="post" action="{with_language("/admin/login", request)}">
+<form method="post" action="{with_language("/user/login", request)}">
   <label>{words["username"]} <input name="username" autocomplete="username" required></label>
   <label>{words["password"]}
     <input name="password" type="password" autocomplete="current-password" required></label>
   <button class="primary">{words["log_in"]}</button>
-</form>""",
+</form>
+{"" if user else signup}""",
+        user,
+    )
+
+
+def account_page(request: Request, user) -> HTMLResponse:
+    """For someone logged in: who they are and what the account is for. The way out, and to the
+    panel for an admin, are in the navigation."""
+    words = TEXTS[language(request)]
+    uses = words["account_admin"] if user.is_admin else words["account_uses"]
+    return page(
+        request,
+        words["account"],
+        f"""<p>{words["logged_in_as"]} <strong>{escape(user.username)}</strong>.</p>
+<p>{uses}</p>""",
+        user,
+    )
+
+
+def signup_page(request: Request, refused: bool, user=None) -> HTMLResponse:
+    """The form to make an account. `refused`: the one text for every reason (the page must not
+    say which names exist)."""
+    words = TEXTS[language(request)]
+    message = f'<p class="error">{words["signup_refused"]}</p>' if refused else ""
+    login = f'<a href="{with_language("/user", request)}">{words["have_account"]}</a>'
+    return page(
+        request,
+        words["sign_up"],
+        f"""{message}
+<form method="post" action="{with_language("/user/signup", request)}">
+  <label>{words["username"]} <input name="username" autocomplete="username" required></label>
+  <label>{words["password"]} <input name="password" type="password"
+    autocomplete="new-password" minlength="5" required></label>
+  <label>{words["password_again"]} <input name="again" type="password"
+    autocomplete="new-password" minlength="5" required></label>
+  <p class="hint">{words["signup_rules"]}</p>
+  <button class="primary">{words["sign_up"]}</button>
+</form>
+<p>{login}</p>""",
         user,
     )
 
@@ -218,8 +266,10 @@ def users_page(request: Request, users: list, me) -> HTMLResponse:
         )
     return page(
         request,
-        words["accounts"],
-        f"""<table>
+        words["admin"],
+        f"""<p><a href="/grafana/">Grafana</a></p>
+<h2>{words["accounts"]}</h2>
+<table>
 <thead><tr><th>{words["username"]}</th><th>{words["email"]}</th><th>{words["role"]}</th>
 <th><span class="hidden-title">{words["action"]}</span></th></tr></thead>
 <tbody>{rows}</tbody></table>""",
