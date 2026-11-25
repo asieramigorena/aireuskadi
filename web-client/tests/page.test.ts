@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { setLanguage } from "../src/i18n";
-import { applyPageTexts } from "../src/page";
+import { applyPageTexts, setAccountName } from "../src/page";
 
 // The parts of index.html that have a text that is not drawn by anything else.
 function mount() {
@@ -12,7 +12,7 @@ function mount() {
     <aside id="panel" aria-label="" hidden></aside>
     <p id="emissions-credit"></p>
     <p id="air-credit"></p>
-    <a id="admin-link" href="/admin"></a>`;
+    <a id="login-link" href="/user"></a>`;
 }
 
 const label = (id: string) => document.getElementById(id)?.getAttribute("aria-label");
@@ -112,19 +112,28 @@ describe("a page that is missing one of the parts", () => {
   });
 });
 
-describe("the way in for the admins", () => {
+describe("the way in to the accounts", () => {
   test("is named in the language of the page", () => {
     applyPageTexts("emissions", null);
-    expect(text("admin-link")).toBe("Admin login");
+    expect(text("login-link")).toBe("Log in");
 
     setLanguage("es");
     applyPageTexts("emissions", null);
-    expect(text("admin-link")).toBe("Acceso admin");
+    expect(text("login-link")).toBe("Iniciar sesión");
+  });
+
+  test("says the name of who is logged in, and still goes to /user (their account)", () => {
+    setAccountName("user1");
+    applyPageTexts("emissions", null);
+
+    expect(text("login-link")).toBe("user1");
+    expect(document.getElementById("login-link")?.getAttribute("href")).toBe("/user?lang=en");
+    setAccountName(null);
   });
 
   test("takes the language of the map to the login page", () => {
     setLanguage("eu");
     applyPageTexts("emissions", null);
-    expect(document.getElementById("admin-link")?.getAttribute("href")).toBe("/admin?lang=eu");
+    expect(document.getElementById("login-link")?.getAttribute("href")).toBe("/user?lang=eu");
   });
 });

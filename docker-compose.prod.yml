@@ -119,6 +119,8 @@ services:
     environment:
       AUTH_DATABASE_URL: postgresql+psycopg://${POSTGRES_AUTH_USER}:${POSTGRES_AUTH_PASSWORD}@postgres:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET:?it comes from the Vault (see deploy/fetch-secrets.sh)}
+      # Nobody can sign up with the name of the full admin of Grafana: the owner makes that one.
+      GRAFANA_ADMIN_USER: ${GRAFANA_ADMIN_USER:?set it in .env (the account that is the full admin of Grafana)}
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -133,6 +135,40 @@ services:
       retries: 3
       start_period: 15s
 
+  # The questions to a language model (any API with the chat completions of OpenAI). Each person
+  # logs in and types their own key in the panel: it comes with each question and is never kept.
+  # No database, no published port; only the gateway reaches it, and it calls the API on the Internet.
+  insight-service:
+    <<: *application
+    image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-insight-service:${IMAGE_TAG:-pro}
+    # Its own network, with the gateway only: no other container can ask it (it checks no session). It is not
+    # `internal`, because the model is on the Internet.
+    networks: [insight]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # The cache of the gateway: the answers of the services for a while, and the texts of the language
+  # model for days. No persistence (a restart only loses what is generated again), 64 MB at most,
+  # on its own network with the gateway only, no published port.
+  redis:
+    <<: *application
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    networks: [cache]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   # The only way in: the page and the API. No port is published: the tunnel reaches it by name.
   api-gateway:
     <<: *application
@@ -142,10 +178,16 @@ services:
       AIR_QUALITY_URL: http://air-quality-service:8000
       AUTH_URL: http://auth-service:8000
       GRAFANA_URL: http://grafana:3000
-    # It also joins `edge`, the only network the tunnel is on, and `monitoring`, the only one
-    # Grafana is on.
-    networks: [default, edge, monitoring]
+      # Not in depends_on: without it the gateway still answers, and the questions say so.
+      INSIGHT_URL: http://insight-service:8000
+      REDIS_URL: redis://redis:6379/0
+    # It also joins `edge`, the only network the tunnel is on, `cache`, the only one Redis is on,
+    # `insight`, the only one the insight service is on, and `monitoring`, the only one Grafana is on.
+    networks: [default, edge, cache, insight, monitoring]
     depends_on:
+      # Started, not healthy: without Redis the gateway still answers.
+      redis:
+        condition: service_started
       emissions-service:
         condition: service_healthy
       air-quality-service:
@@ -316,6 +358,8 @@ services:
 
 networks:
   edge:
+  cache:
+  insight:
   monitoring:
 
 volumes:

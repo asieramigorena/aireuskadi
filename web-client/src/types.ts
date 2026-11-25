@@ -148,3 +148,19 @@ export interface PollutantName {
   code: string;
   name: string;
 }
+
+/** A text that a language model wrote about a unit, or about what a value means. */
+export interface Insight {
+  text: string;
+  model: string;
+}
+
+/** The questions about one unit; the others (who_ratio, density, pollutant:<CODE>) are general. */
+export type UnitQuestion = "summary" | "meaning";
+
+/** What the person chose to ask with: a provider of the list, a model, and their own key. */
+export interface LlmChoice {
+  provider: string;
+  model: string;
+  key: string;
+}

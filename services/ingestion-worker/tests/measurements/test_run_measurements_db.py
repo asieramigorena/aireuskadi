@@ -86,6 +86,21 @@ def test_if_one_province_fails_the_run_is_failed_and_nothing_stays_not_even_the_
     assert count(engine, "SELECT count(*) FROM core.measurement") == measurements_before
 
 
+def test_if_no_province_sends_any_hour_the_run_is_failed(engine, boundaries):
+    # One empty province can happen; all three at once means the API is not giving data.
+    ok = fake_fetch()
+
+    def fetch(url):
+        return b"[]" if "/counties/" in url else ok(url)
+
+    with pytest.raises(ValueError, match="no hours"):
+        run_measurements(engine, now=NOW, fetch=fetch)
+
+    with Session(engine) as session:
+        run = session.scalars(select(IngestionRun).order_by(IngestionRun.id.desc())).first()
+        assert (run.source, run.status) == ("measurements", "failed")
+
+
 def test_running_it_again_every_hour_does_not_duplicate_anything(engine, boundaries):
     run_measurements(engine, now=NOW, fetch=fake_fetch())
     run_measurements(engine, now=NOW, fetch=fake_fetch())

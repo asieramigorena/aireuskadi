@@ -5,8 +5,9 @@ import sys
 from types import SimpleNamespace
 
 import pytest
-from auth_service.admin import COOKIE, create_access_token
+from aireuskadi_db.accounts import USERNAME
 from auth_service.main import create_app
+from auth_service.session import COOKIE, create_access_token
 from fastapi.testclient import TestClient
 
 JWT_SECRET = "x" * 32
@@ -31,6 +32,13 @@ class FakeAccounts:
         )
         self.users[user.id] = user
         return user
+
+    def sign_up(self, username, password):
+        """Like Accounts.sign_up: None when the name is taken or breaks the rules."""
+        username = username.strip().lower()
+        if len(password) < 5 or not USERNAME.fullmatch(username) or self.find_by_name(username):
+            return None
+        return self.add(username, password)
 
     def find(self, user_id):
         return self.users.get(user_id)
@@ -69,7 +77,9 @@ def fake_accounts():
 def admin_client(fake_accounts):
     """The service with the fake accounts. HTTPS, so that the client sends back the Secure
     cookie (the browser reaches the site through HTTPS)."""
-    with TestClient(create_app(fake_accounts, JWT_SECRET), base_url="https://testserver") as client:
+    # "grafanaadmin" is the account named in GRAFANA_ADMIN_USER: nobody can sign up with it.
+    app = create_app(fake_accounts, JWT_SECRET, reserved_names=("grafanaadmin",))
+    with TestClient(app, base_url="https://testserver") as client:
         yield client
 
 

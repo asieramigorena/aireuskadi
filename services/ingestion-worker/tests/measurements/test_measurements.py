@@ -1,6 +1,7 @@
 import json
 from datetime import UTC, datetime
 
+import pytest
 from ingestion_worker.measurements.parse import MeasurementRecord, parse_measurements
 
 
@@ -133,11 +134,21 @@ def test_a_pollutant_name_that_is_not_known_is_rejected_and_logged_and_the_other
     assert record.pollutant_name == "Mercurio"
 
 
-def test_a_value_that_is_not_a_number_is_rejected_and_logged_and_the_others_stay(caplog):
+def test_a_value_that_is_not_a_number_or_has_no_unit_is_rejected_and_logged_and_the_others_stay(
+    caplog,
+):
     text = hours(
         (
             "2026-11-01T08:00:00Z",
-            [station("211", value("NO2", "n/d"), value("O3", None), value("SO2", 4.0))],
+            [
+                station(
+                    "211",
+                    value("NO2", "n/d"),
+                    {"name": "O3", "value": 40.0},  # no unit
+                    value("PM10", "NaN"),
+                    value("SO2", 4.0),
+                )
+            ],
         )
     )
 
@@ -145,11 +156,20 @@ def test_a_value_that_is_not_a_number_is_rejected_and_logged_and_the_others_stay
         result = parse_measurements(text)
 
     assert [r.pollutant_code for r in result.accepted] == ["SO2"]
-    assert [(r.name, "number" in r.reason) for r in result.rejected] == [
-        ("NO2", True),
-        ("O3", True),
+    assert [(r.name, r.reason) for r in result.rejected] == [
+        ("NO2", "value is not a number"),
+        ("O3", "unit is missing"),
+        ("PM10", "value is not a number"),
     ]
-    assert len(caplog.records) == 2
+    assert len(caplog.records) == 3
+
+
+def test_an_answer_that_is_not_a_list_of_hours_stops_the_run_with_a_clear_error():
+    # The API changed: nothing of it is loaded, and the error says so.
+    with pytest.raises(ValueError, match="measurements answer changed"):
+        parse_measurements(json.dumps({"error": "maintenance"}))
+    with pytest.raises(ValueError, match="measurements answer changed"):
+        parse_measurements(json.dumps([{"fecha": "2026-11-01T08:00:00Z"}]))
 
 
 def test_rows_read_counts_the_values_that_are_tried_not_the_ones_that_are_not_data():

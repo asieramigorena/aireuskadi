@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { createRouter, homeUrl, parseLocation, trendUrl, unitUrl, type Selection } from "../src/router";
+import { DEFAULT_SELECTION, createRouter, homeUrl, parseLocation, setDefaultYear, trendUrl, unitUrl, type Selection } from "../src/router";
 
 const emissions = (pollutant: string, year: number): Selection => ({ view: "emissions", pollutant, year });
 const air = (pollutant: string): Selection => ({ view: "air", pollutant, year: 2023 });
@@ -69,6 +69,19 @@ describe("homeUrl", () => {
     expect(homeUrl(emissions("NOX", 2023))).toBe("/");
     expect(homeUrl(emissions("CO", 2019))).toBe("/?pollutant=CO&year=2019");
     expect(homeUrl(emissions("NOX", 2020))).toBe("/?year=2020");
+  });
+});
+
+describe("the year when the address says none", () => {
+  afterEach(() => setDefaultYear(DEFAULT_SELECTION.year));
+
+  test("is the newest with emissions once it is known, and an address keeps a year only if it is another", () => {
+    setDefaultYear(2024);
+
+    expect(parseLocation("/", "").selection.year).toBe(2024);
+    expect(parseLocation("/", "?year=2023").selection.year).toBe(2023);
+    expect(homeUrl(emissions("NOX", 2024))).toBe("/");
+    expect(homeUrl(emissions("NOX", 2023))).toBe("/?year=2023");
   });
 });
 

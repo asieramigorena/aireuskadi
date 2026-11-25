@@ -109,8 +109,8 @@ describe("the two maps", () => {
   });
 
   test("a pollutant without a name here is said by its code, and the year of the emissions is not in this caption", () => {
-    expect(mapCaption({ view: "air", pollutant: "H2S", year: 1999 })).toBe(
-      "Latest air quality: H2S, against the WHO guideline",
+    expect(mapCaption({ view: "air", pollutant: "XYZ", year: 1999 })).toBe(
+      "Latest air quality: XYZ, against the WHO guideline",
     );
   });
 
@@ -156,11 +156,23 @@ describe("the readings of the stations", () => {
     }
   });
 
-  test("the pollutants of the WHO have a name, and any other is shown by its code", () => {
+  test("the pollutants of the WHO have a name, and one that is not known is shown by its code", () => {
     expect(airPollutantName("NO2")).toBe("Nitrogen dioxide");
     expect(airPollutantName("PM25")).toBe("Particles PM2.5"); // the code that the network uses
     expect(airPollutantName("O3")).toBe("Ozone");
-    expect(airPollutantName("H2S")).toBe("H2S");
+    expect(airPollutantName("XYZ")).toBe("XYZ");
+  });
+
+  // Every code of services/ingestion-worker/.../measurements/data/api_names.csv.
+  test.each(["en", "es", "eu"] as const)("in %s every pollutant that the stations measure has a name", (lang) => {
+    setLanguage(lang);
+    // NOX in English is the name that the API gives the emissions of the unit (the dictionary of
+    // English does not override the API).
+    const codes = ["BENZENE", "CO", "ETHYLBENZENE", "M_P_XYLENE", "NH3", "NO", "NO2", "O3", "O_XYLENE", "PM10", "PM25", "H2S", "SO2", "TOLUENE"];
+    for (const code of lang === "en" ? codes : [...codes, "NOX"]) {
+      expect(airPollutantName(code), `${lang} ${code}`).not.toBe(code);
+    }
+    setLanguage("en");
   });
 
   test("a pollutant that has no name here takes the one of the emissions of the unit, and ours come first", () => {
@@ -171,7 +183,7 @@ describe("the readings of the stations", () => {
 
     expect(airPollutantName("BENZENE", known)).toBe("Benzene");
     expect(airPollutantName("NO2", known)).toBe("Nitrogen dioxide");
-    expect(airPollutantName("H2S", known)).toBe("H2S");
+    expect(airPollutantName("XYZ", known)).toBe("XYZ");
   });
 
   test("with a guideline and a complete day, the ratio is said as it is", () => {
@@ -297,7 +309,7 @@ describe("the names of the pollutants follow the language", () => {
   test("those of the air quality, with the names of the card as a fallback and the code at last", () => {
     setLanguage("es");
     expect(airPollutantName("NO2")).toBe("Dióxido de nitrógeno");
-    expect(airPollutantName("H2S", new Map([["H2S", "Sulfuro"]]))).toBe("Sulfuro");
+    expect(airPollutantName("XYZ", new Map([["XYZ", "Sulfuro"]]))).toBe("Sulfuro");
     expect(airPollutantName("ZZ")).toBe("ZZ");
 
     setLanguage("eu");

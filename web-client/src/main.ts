@@ -10,9 +10,10 @@ import { detectLanguage, language, setLanguage, texts, type Language } from "./i
 import { levelForZoom } from "./levels";
 import { renderLegend } from "./legend";
 import { createMap } from "./map";
-import { applyPageTexts } from "./page";
+import { applyPageTexts, setAccountName } from "./page";
+import { askFor, renderAsk, type AskFn } from "./ask";
 import { renderPanel, type PanelView } from "./panel";
-import { createRouter, homeUrl, unitUrl, type Classification, type Selection, type State } from "./router";
+import { createRouter, homeUrl, parseLocation, setDefaultYear, unitUrl, type Classification, type Selection, type State } from "./router";
 import { maxDensity } from "./scale";
 import type { BoundaryCollection, Level, Point, StationCollection, UnitCollection, UnitIndicators } from "./types";
 import { drawTrendChart, focusedTrendControl, loadTrend, restoreTrendFocus, trendSeries } from "./trend";
@@ -95,12 +96,33 @@ function fitMapToPanel() {
   map.setInset(insetFor(box, window.innerWidth, window.innerHeight));
 }
 
+// Who is logged in (null: nobody), asked once when the page opens: only they can ask the model.
+let account: string | null = null;
+let shownView: PanelView | null = null;
+
 function showPanel(view: PanelView) {
   chart?.destroy();
   chart = null;
+  shownView = view;
   renderPanel(panel, view, selection!, () => router.navigate(homeUrl(selection!)), (url) => router.navigate(url));
   fitMapToPanel();
+  drawAsk();
 }
+
+/** The box of the questions, in its corner: about the unit whose card is open, if any. */
+function drawAsk() {
+  if (!selection) return;
+  const card = shownView?.status === "card" ? shownView.card : null;
+  const ask: AskFn = (question, llm) => askFor(api, card?.code ?? "", question, language(), selection!.year, llm);
+  renderAsk(element("ask"), card, selection, ask, account, (provider, key) => api.models(provider, key));
+}
+
+void api.me().then((name) => {
+  account = name;
+  setAccountName(name);
+  if (selection) applyPageTexts(selection.view, stations?.attribution ?? null);
+  drawAsk();
+});
 
 function failure(error: unknown) {
   if (failureText(error) !== null) say(() => failureText(error) ?? "");
@@ -265,6 +287,8 @@ function onState(state: State) {
 
   lastState = state;
   drawControls(state, wanted);
+  // The pollutant of the map and the language are in the box of the questions too.
+  if (dataChanged || languageChanged) drawAsk();
 
   cardLoad.abort();
   if (state.route.name === "unit") {
@@ -309,6 +333,13 @@ void Promise.allSettled([api.years(), api.pollutants()]).then(([years, pollutant
     pollutants: pollutants.status === "fulfilled" ? pollutants.value : [],
   };
   if (!lastState) return;
+  if (choices.years.length) {
+    // An address without a year shows the newest one: now that it is known, the address is read
+    // again. An address with a year says the same as before, and nothing is drawn again.
+    setDefaultYear(Math.max(...choices.years));
+    const again = parseLocation(window.location.pathname, window.location.search);
+    if (again.selection.year !== lastState.selection.year) onState(again);
+  }
   drawControls(lastState, language());
   element("caption").textContent = mapCaption(lastState.selection, pollutantNames());
 });

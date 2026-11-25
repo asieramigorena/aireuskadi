@@ -122,7 +122,7 @@ body {
 
 /* The way in for the admins: a round button like the ones that choose the map, but as small and
  * quiet as the languages, because it is not for the visitors. */
-.admin-link {
+.login-link {
   display: inline-flex;
   align-items: center;
   min-height: 1.5rem;
@@ -137,7 +137,7 @@ body {
   pointer-events: auto;
 }
 
-.admin-link:hover {
+.login-link:hover {
   border-color: var(--muted-on-sea);
   color: var(--text-on-sea);
 }
@@ -521,7 +521,7 @@ body {
     align-items: center;
   }
 
-  .admin-link {
+  .login-link {
     min-height: 2.75rem;
   }
 
@@ -677,5 +677,131 @@ body {
 
   #panel:not([hidden]) ~ .legend {
     display: none;
+  }
+}
+
+/* The questions to a language model: a small box in the bottom right corner, always there. It opens
+ * and closes from its title line. Next to the panel when the panel is open on the right. */
+.ask-box {
+  position: absolute;
+  right: var(--right);
+  bottom: var(--bottom);
+  z-index: 2;
+  width: min(20rem, calc(100% - var(--left) - var(--right)));
+  max-height: 60%;
+  box-sizing: border-box;
+  overflow-y: auto;
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 6px;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.4);
+  font-size: 0.9rem;
+}
+
+/* Next to the panel, and above the credits, which then reach that far. */
+#panel:not([hidden]) ~ .ask-box {
+  right: calc(var(--right) + var(--panel-width) + var(--gap));
+  bottom: calc(var(--bottom) + 2.8rem);
+}
+
+.ask-box a {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.ask-box summary {
+  padding: 0.55rem 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.ask-box details[open] {
+  padding: 0 0.8rem 0.8rem;
+}
+
+.ask-box details[open] summary {
+  margin: 0 -0.8rem 0.4rem;
+}
+
+.ask-box .about {
+  margin: 0 0 0.6rem;
+}
+
+.ask-box label {
+  display: block;
+  margin: 0 0 0.5rem;
+}
+
+.ask-box select,
+.ask-box input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0.2rem 0 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--paper-line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+
+/* The questions about a unit while none is open: there, but in another colour, and not chosen. */
+.ask-box option.needs-unit:disabled {
+  color: #8a9a9e;
+}
+
+.ask-box button {
+  min-height: 2.25rem;
+  padding: 0.35rem 1rem;
+  border: 1px solid var(--paper-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ask-box button:hover {
+  background: #e0e8e5;
+}
+
+.ask-box button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.ask-box .answer {
+  margin: 0.6rem 0 0;
+  line-height: 1.5;
+}
+
+.ask-box .note {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: #4a5f66;
+}
+
+@media (pointer: coarse) {
+  /* A finger needs 44 px, like the buttons of the panel. */
+  .ask-box summary,
+  .ask-box button,
+  .ask-box select,
+  .ask-box input {
+    min-height: 2.75rem;
+  }
+}
+
+/* A narrow screen: the panel is a sheet from the bottom, so the box goes above it while it is open. */
+@media (max-width: 52rem) {
+  .ask-box {
+    bottom: calc(var(--bottom) + 1.9rem);
+    max-height: 50%;
+  }
+
+  #panel:not([hidden]) ~ .ask-box {
+    right: var(--right);
+    bottom: calc(45% + 3rem);
+    max-height: 40%;
   }
 }

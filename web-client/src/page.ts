@@ -13,6 +13,13 @@ function label(id: string, text: string): void {
 
 /** Writes them for the language in use and the map that is shown. `stationsAttribution` is the credit
  * that the stations come with, once they have arrived. */
+// The name of who is logged in (from /user/me, asked once by main.ts), or null.
+let accountName: string | null = null;
+
+export function setAccountName(name: string | null) {
+  accountName = name;
+}
+
 export function applyPageTexts(view: View, stationsAttribution: string | null): void {
   const words = texts();
   document.documentElement.lang = language();
@@ -21,12 +28,13 @@ export function applyPageTexts(view: View, stationsAttribution: string | null): 
   label("panel", words.panelLabel);
   label("map", mapLabel(view));
 
-  // The way in for the admins: a plain link to the login page, which the auth service makes, in the
-  // language of the map.
-  const adminLink = byId("admin-link");
-  if (adminLink) {
-    adminLink.textContent = words.adminLink;
-    adminLink.setAttribute("href", `/admin?lang=${language()}`);
+  // The way in to the accounts: a plain link to the login page (/user, with the sign-up), which the
+  // auth service makes, in the language of the map. Someone logged in sees their name: the same
+  // page is then their account, with the way out.
+  const loginLink = byId("login-link");
+  if (loginLink) {
+    loginLink.textContent = accountName ?? words.loginLink;
+    loginLink.setAttribute("href", `/user?lang=${language()}`);
   }
 
   // The credit of what the map shows: the emissions, or the stations.

@@ -42,8 +42,9 @@ openssl rand -base64 48 | tr '+/' '-_' | tr -d '='    # JWT_SECRET
 
 ### More or less
 
-An admin account, to see Grafana at <http://127.0.0.1:8080/admin> (it asks the password; name it
-like `GRAFANA_ADMIN_USER` of `.env`). Admins make other accounts admins at `/admin/users`:
+An admin account, for the panel at <http://127.0.0.1:8080/admin> (the accounts and Grafana; log in at
+`/user`; name it like `GRAFANA_ADMIN_USER` of `.env`). Accounts made at `/user/signup` are never admins:
+an admin is made here, or by another admin in the panel:
 
 ```sh
 docker compose run --rm --entrypoint aireuskadi-admin db-init add <name>
@@ -74,6 +75,10 @@ uv sync --all-packages
 uv run --env-file .env aireuskadi-db-init
 uv run --env-file .env python -m ingestion_worker.main boundaries
 ```
+
+Anyone can sign up at <http://127.0.0.1:8080/user> and ask a language model about the data from the
+panel of a municipality, with their own key (Groq, OpenRouter, Gemini, Mistral, Ollama, OpenAI): the
+key stays in the tab and is never kept.
 
 To show your own copy on the internet, `tunnel/` has a Tailscale Funnel that publishes only the
 gateway. Put an auth key in `TS_AUTHKEY` of `.env` and run

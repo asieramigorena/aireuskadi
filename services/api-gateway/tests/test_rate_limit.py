@@ -1,6 +1,6 @@
-"""The limit of requests: so many per minute and per person, like rateLimit of the course example
-(express-rate-limit, 100 a minute and IP). The person is the address that the tunnel says
-(X-Forwarded-For, which Tailscale writes itself) or, without the tunnel, the one of the connection."""
+"""The limit of requests: so many per minute and per person. The person is the address that the
+tunnel says (X-Forwarded-For, which Tailscale writes itself) or, without the tunnel, the one of the
+connection."""
 
 import pytest
 from api_gateway.main import create_app

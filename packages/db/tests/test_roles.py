@@ -8,11 +8,13 @@ import os
 
 import pytest
 from aireuskadi_db import SCHEMA, Base, create_reader_role, migrate
+from aireuskadi_db.accounts import Accounts
 from aireuskadi_db.roles import create_auth_role
 from aireuskadi_db.schema import main
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.orm import sessionmaker
 
 URL = os.environ.get("DATABASE_URL")
 pytestmark = pytest.mark.skipif(not URL, reason="DATABASE_URL is not set")
@@ -161,20 +163,30 @@ def auth_role(owner):
     engine.dispose()
 
 
-def test_the_auth_service_reads_the_accounts_and_changes_only_is_admin(auth_role):
+def test_the_auth_service_reads_the_accounts_signs_people_up_and_changes_only_is_admin(
+    owner, auth_role
+):
+    with owner.begin() as conn:
+        conn.execute(text("DELETE FROM auth.app_user WHERE username IN ('user1', 'user2')"))
+    # A sign-up: the name and the password only. The account is never an admin.
+    user = Accounts(sessionmaker(auth_role, expire_on_commit=False)).sign_up("user1", "a" * 12)
+    assert user is not None and user.is_admin is False
     with auth_role.begin() as conn:
         conn.execute(text("SELECT username, hashed_password, is_admin FROM auth.app_user"))
         conn.execute(text("UPDATE auth.app_user SET is_admin = false WHERE id = -1"))
 
     forbidden = [
         "UPDATE auth.app_user SET hashed_password = 'x' WHERE id = -1",
-        "INSERT INTO auth.app_user (username) VALUES ('user1')",
+        # Not even a new account can be made an admin: only is_admin by UPDATE (an admin does it).
+        "INSERT INTO auth.app_user (username, is_admin) VALUES ('user2', true)",
         "DELETE FROM auth.app_user",
         f"SELECT count(*) FROM {SCHEMA}.municipality",
     ]
     for statement in forbidden:
         with pytest.raises(ProgrammingError, match="permission denied"), auth_role.begin() as conn:
             conn.execute(text(statement))
+    with owner.begin() as conn:
+        conn.execute(text("DELETE FROM auth.app_user WHERE username = 'user1'"))
 
 
 def test_the_command_creates_the_role_of_the_auth_service_too(owner, monkeypatch):
