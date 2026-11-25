@@ -20,6 +20,7 @@ COPY packages/db packages/db
 COPY packages/http packages/http
 COPY packages/logger packages/logger
 COPY services/auth-service/pyproject.toml services/auth-service/pyproject.toml
+COPY services/insight-service/pyproject.toml services/insight-service/pyproject.toml
 COPY services/api-gateway/pyproject.toml services/api-gateway/pyproject.toml
 COPY services/ingestion-worker/pyproject.toml services/ingestion-worker/pyproject.toml
 COPY services/emissions-service/pyproject.toml services/emissions-service/pyproject.toml

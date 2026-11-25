@@ -1,0 +1,24 @@
+[project]
+name = "insight-service"
+version = "0.1.0"
+description = "AirEuskadi questions to a language model: short texts about the data of a unit"
+requires-python = ">=3.12"
+dependencies = [
+    "aireuskadi-http",
+    "aireuskadi-logger",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "httpx>=0.28",
+    # ChatOpenAI talks to any API with the chat completions of OpenAI when it is given its address
+    # (base_url).
+    "langchain-core>=1.0,<2",
+    "langchain-openai>=1.0,<2",
+]
+
+[tool.uv.sources]
+aireuskadi-http = { workspace = true }
+aireuskadi-logger = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
