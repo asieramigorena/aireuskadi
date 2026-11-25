@@ -164,3 +164,16 @@ export interface LlmChoice {
   model: string;
   key: string;
 }
+
+/** The series of a pollutant at a station (GET /stations/{id}/measurements), always in µg/m3. */
+export interface StationSeries {
+  attribution: string;
+  station: { id: number; code: string; name: string };
+  pollutant: string;
+  interval: "hour" | "day";
+  unit: string;
+  from: string;
+  to: string;
+  /** Daily series: `hours` behind each mean and `coverage_ok` (at least 18 of them). */
+  points: { ts: string; value: number; hours?: number; coverage_ok?: boolean }[];
+}

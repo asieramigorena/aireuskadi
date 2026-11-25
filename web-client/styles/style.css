@@ -680,6 +680,59 @@ body {
   }
 }
 
+/* The series of a station, under its table: a plain button (not the round close button), the
+ * choices, and a chart of a fixed height. */
+#panel .series {
+  margin: 0.6rem 0 0.8rem;
+}
+
+#panel .series button {
+  width: auto;
+  height: auto;
+  min-height: 2.25rem;
+  padding: 0.35rem 1rem;
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+#panel .series label {
+  display: block;
+  margin: 0.4rem 0;
+  font-size: 0.9rem;
+}
+
+#panel .series select {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 0.2rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--paper-line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+
+#panel .series-chart {
+  position: relative;
+  height: 12rem;
+  margin: 0.6rem 0;
+}
+
+#panel .series .note {
+  margin: 0.3rem 0;
+  font-size: 0.85rem;
+  color: #4a5f66;
+}
+
+@media (pointer: coarse) {
+  #panel .series button,
+  #panel .series select {
+    min-height: 2.75rem;
+  }
+}
+
 /* The questions to a language model: a small box in the bottom right corner, always there. It opens
  * and closes from its title line. Next to the panel when the panel is open on the right. */
 .ask-box {

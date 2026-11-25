@@ -87,6 +87,18 @@ describe("the calls go only to the gateway, to the routes of /api/v1", () => {
     expect(urlOf(second.fetchFn).pathname).toBe("/api/v1/insights/pollutant%3ANO2");
   });
 
+  test("the series of a station: its id in the path, the pollutant and the range as parameters", async () => {
+    const { api, fetchFn } = apiWith(answer({ points: [] }));
+
+    await api.stationSeries(7, "NO2", { from: "2026-11-24T14:00:00.000Z", to: "2026-11-25T14:20:00.000Z", interval: "hour" });
+
+    const url = urlOf(fetchFn);
+    expect(url.pathname).toBe("/api/v1/stations/7/measurements");
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      pollutant: "NO2", from: "2026-11-24T14:00:00.000Z", to: "2026-11-25T14:20:00.000Z", interval: "hour",
+    });
+  });
+
   test("the models of a provider: the provider in the address, the key only in a header", async () => {
     const { api, fetchFn } = apiWith(answer({ models: ["a", "b"] }));
 
