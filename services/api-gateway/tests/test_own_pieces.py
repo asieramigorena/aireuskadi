@@ -49,6 +49,9 @@ def test_the_library_that_asks_the_service_does_not_write_its_own_line_in_the_lo
 ):
     # httpx logs the whole URL of every request it makes: the internal name and port of the
     # service and the values of the query that the client typed.
+    # The test client of Starlette uses httpx2 when it is installed (the insight service brings it):
+    # its line is the one of the test, not of the gateway.
+    caplog.set_level(logging.WARNING, logger="httpx2")
     with caplog.at_level(logging.INFO):
         client.get("/api/v1/units?level=municipality&pollutant=NOX&year=2023")
 
