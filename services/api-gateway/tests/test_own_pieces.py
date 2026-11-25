@@ -19,7 +19,7 @@ def test_the_gateway_has_its_own_health_check_that_does_not_ask_the_service(clie
 
 def test_the_interactive_documentation_is_off_unless_it_is_asked_for(client):
     assert client.get("/docs").status_code == 404
-    assert client.get("/redoc").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
 
 
 def test_each_request_leaves_one_record_without_the_query_string_or_the_headers(

@@ -14,6 +14,7 @@ from fastapi import FastAPI
 
 from api_gateway import admin, grafana, routes
 from api_gateway.cache import Cache
+from api_gateway.openapi import install_docs
 from api_gateway.rate_limit import RateLimit, install_rate_limit
 from api_gateway.web import web_router
 
@@ -35,10 +36,10 @@ def create_app(
     rate_limit: RateLimit | None = None,
 ) -> FastAPI:
     """`emissions` and `air_quality` are the clients of the two services of the API, and
-    `cache` the one of Redis (none: every question goes to the service). The
-    interactive pages (/docs and /redoc) load their scripts from other sites, so they and
-    /openapi.json are only there if asked. `web_dir` is the folder of the compiled web page;
-    without it the gateway publishes only the API (in development the page comes from Vite).
+    `cache` the one of Redis (none: every question goes to the service). `docs` adds /docs
+    and /openapi.json (openapi.py): the page loads its scripts from another site, so only if
+    asked. `web_dir` is the folder of the compiled web page; without it the gateway publishes
+    only the API (in development the page comes from Vite).
     `auth_client` is the client of the auth service, which makes the admin pages: without it
     /admin does not exist. With `grafana_client` too, admins see Grafana at /grafana/.
     `rate_limit` is how many requests a person can make each minute (none: no limit)."""
@@ -57,10 +58,10 @@ def create_app(
 
     app = FastAPI(
         title="AirEuskadi API Gateway",
-        docs_url="/docs" if docs else None,
-        redoc_url="/redoc" if docs else None,
-        # The description of the routes is the list of what can be probed: it goes with the pages.
-        openapi_url="/openapi.json" if docs else None,
+        # The documentation is made by openapi.py (install_docs below), not by FastAPI.
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
         # /x/ is a 404, not a redirect to /x: the redirect repeats the Host header of the request,
         # which behind the compose would give away the internal name and port of the service.
         redirect_slashes=False,
@@ -80,6 +81,9 @@ def create_app(
     install_request_log(app, "api_gateway.access", quiet_paths=(routes.HEALTH_PATH,))
     app.include_router(routes.health)
     app.include_router(routes.router, prefix=PREFIX)
+    # The description of the routes is the list of what can be probed: only when asked.
+    if docs:
+        install_docs(app, PREFIX)
     if auth_client:
         app.state.auth = auth_client
         app.include_router(admin.router)
