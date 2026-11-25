@@ -10,7 +10,8 @@ import { detectLanguage, language, setLanguage, texts, type Language } from "./i
 import { levelForZoom } from "./levels";
 import { renderLegend } from "./legend";
 import { createMap } from "./map";
-import { applyPageTexts } from "./page";
+import { applyPageTexts, setAccountName } from "./page";
+import { askFor, renderAsk, type AskFn } from "./ask";
 import { renderPanel, type PanelView } from "./panel";
 import { createRouter, homeUrl, parseLocation, setDefaultYear, unitUrl, type Classification, type Selection, type State } from "./router";
 import { maxDensity } from "./scale";
@@ -95,12 +96,33 @@ function fitMapToPanel() {
   map.setInset(insetFor(box, window.innerWidth, window.innerHeight));
 }
 
+// Who is logged in (null: nobody), asked once when the page opens: only they can ask the model.
+let account: string | null = null;
+let shownView: PanelView | null = null;
+
 function showPanel(view: PanelView) {
   chart?.destroy();
   chart = null;
+  shownView = view;
   renderPanel(panel, view, selection!, () => router.navigate(homeUrl(selection!)), (url) => router.navigate(url));
   fitMapToPanel();
+  drawAsk();
 }
+
+/** The box of the questions, in its corner: about the unit whose card is open, if any. */
+function drawAsk() {
+  if (!selection) return;
+  const card = shownView?.status === "card" ? shownView.card : null;
+  const ask: AskFn = (question, llm) => askFor(api, card?.code ?? "", question, language(), selection!.year, llm);
+  renderAsk(element("ask"), card, selection, ask, account, (provider, key) => api.models(provider, key));
+}
+
+void api.me().then((name) => {
+  account = name;
+  setAccountName(name);
+  if (selection) applyPageTexts(selection.view, stations?.attribution ?? null);
+  drawAsk();
+});
 
 function failure(error: unknown) {
   if (failureText(error) !== null) say(() => failureText(error) ?? "");
@@ -265,6 +287,8 @@ function onState(state: State) {
 
   lastState = state;
   drawControls(state, wanted);
+  // The pollutant of the map and the language are in the box of the questions too.
+  if (dataChanged || languageChanged) drawAsk();
 
   cardLoad.abort();
   if (state.route.name === "unit") {

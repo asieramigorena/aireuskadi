@@ -88,10 +88,11 @@ const named = (table: Record<string, string>, code: string): string | undefined 
   Object.hasOwn(table, code) ? table[code] : undefined;
 
 /** The name of a pollutant that the stations measure; the API gives only its code. The ones of the
- * WHO are named by the dictionary; for another, the name that the emissions of the same unit give it
- * (`known`, from the card) is used, and if there is none, the code. */
+ * WHO are named by the dictionary, the others (benzene, toluene...) by its list of pollutants; if
+ * neither has it, the name that the emissions of the same unit give it (`known`, from the card), and
+ * if there is none, the code. */
 export const airPollutantName = (code: string, known?: ReadonlyMap<string, string>) =>
-  named(texts().airPollutants, code) ?? known?.get(code) ?? code;
+  named(texts().airPollutants, code) ?? named(texts().pollutants, code) ?? known?.get(code) ?? code;
 
 /** The name of a pollutant of the emissions: the one of the language, and where it has none (English
  * has none: the API speaks English) the one that the API gives. */

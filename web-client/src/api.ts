@@ -1,7 +1,8 @@
 // The calls to the gateway. It is the only place that knows the routes, and the only way out of the
 // page: a relative URL, so that every call goes to the site that served the page and never to
 // another one.
-import type { BoundaryCollection, Inventory, Level, Point, PollutantName, StationCollection, UnitCard, UnitIndicators } from "./types";
+import type { BoundaryCollection, Insight, Inventory, LlmChoice, Level, Point, PollutantName, StationCollection, UnitCard, UnitIndicators, UnitQuestion } from "./types";
+import type { Language } from "./i18n/types";
 import { errorText } from "./format";
 import { texts } from "./i18n";
 import type { Selection } from "./router";
@@ -34,11 +35,16 @@ export function failureText(error: unknown): string | null {
 }
 
 export function createApi(fetchFn: typeof fetch = (...args) => fetch(...args)) {
-  async function get<T>(path: string, query: Record<string, string>, signal?: AbortSignal): Promise<T> {
+  async function get<T>(
+    path: string,
+    query: Record<string, string>,
+    signal?: AbortSignal,
+    headers?: Record<string, string>,
+  ): Promise<T> {
     const text = new URLSearchParams(query).toString();
     let response: Response;
     try {
-      response = await fetchFn(`${PREFIX}${path}${text ? `?${text}` : ""}`, { signal });
+      response = await fetchFn(`${PREFIX}${path}${text ? `?${text}` : ""}`, { signal, headers });
     } catch (error) {
       // A cancelled call is not a failure of the service: whoever cancelled it knows.
       if (error instanceof DOMException && error.name === "AbortError") throw error;
@@ -71,6 +77,41 @@ export function createApi(fetchFn: typeof fetch = (...args) => fetch(...args)) {
     /** The trend of a pollutant in the inventory, by the sectors of a classification. */
     inventory: (pollutant: string, classification: string, signal?: AbortSignal) =>
       get<Inventory>("/inventory", { pollutant, classification }, signal),
+    /** A question about one unit, about its card in the year of the map. The provider and the model
+     * go in the address; the key only in a header, so that it is in no address, history or log. */
+    insight: (code: string, question: UnitQuestion, lang: Language, year: number, llm: LlmChoice, signal?: AbortSignal) =>
+      get<Insight>(
+        `/units/${encodeURIComponent(code)}/insight`,
+        { question, lang, year: String(year), provider: llm.provider, model: llm.model },
+        signal,
+        { "X-LLM-Key": llm.key },
+      ),
+    /** What a value means, the same for every unit: who_ratio, density or pollutant:<CODE>. */
+    generalInsight: (topic: string, lang: Language, llm: LlmChoice, signal?: AbortSignal) =>
+      get<Insight>(
+        `/insights/${encodeURIComponent(topic)}`,
+        { lang, provider: llm.provider, model: llm.model },
+        signal,
+        { "X-LLM-Key": llm.key },
+      ),
+    /** The models that the key can use at the provider, for the list of the panel. The key only in a
+     * header, as in the questions. */
+    models: async (provider: string, key: string, signal?: AbortSignal): Promise<string[]> => {
+      const body = await get<{ models: unknown[] }>("/llm/models", { provider }, signal, { "X-LLM-Key": key });
+      return body.models.filter((name): name is string => typeof name === "string");
+    },
+    /** The name of the account that is logged in (the cookie, which the page cannot read), or null:
+     * nobody, or the service could not say. */
+    me: async (): Promise<string | null> => {
+      try {
+        const response = await fetchFn("/user/me");
+        if (!response.ok) return null;
+        const body = await response.json();
+        return typeof body?.username === "string" ? body.username : null;
+      } catch {
+        return null;
+      }
+    },
   };
 }
 
