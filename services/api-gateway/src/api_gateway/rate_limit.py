@@ -1,5 +1,5 @@
-"""The limit of requests of the API and of the admin pages: so many per minute and per person, like
-`rateLimit({ windowMs: 60_000, limit: 100 })` of the course example (express-rate-limit).
+"""The limit of requests of the API and of the pages of the accounts: so many per window of time
+(a minute by default) and per person, kept in memory.
 
 The person is the address of the header X-Forwarded-For, which the tunnel (Tailscale Funnel) writes
 itself with the address of the client: it replaces whatever the client sent. Without the tunnel (on
@@ -16,24 +16,29 @@ from aireuskadi_http import problem
 from fastapi import FastAPI, Request
 
 WINDOW_SECONDS = 60
-# What is counted: the API and the admin pages. The page, its files and /health are not (a page is
-# about twenty files, and the checks of the compose come every few seconds).
-LIMITED_PATHS = ("/api/", "/admin")
+# What is counted: the API, the pages of the accounts and the admin panel. The page, its files and
+# /health are not (a page is about twenty files, and the checks of the compose come every few seconds).
+LIMITED_PATHS = ("/api/", "/admin", "/user")
 
 
 class RateLimit:
-    def __init__(self, limit: int, clock: Callable[[], float] = time.time):
+    """`limit` requests per person in each window of `window` seconds (a minute by default)."""
+
+    def __init__(
+        self, limit: int, clock: Callable[[], float] = time.time, window: int = WINDOW_SECONDS
+    ):
         self.limit = limit
         self.clock = clock
-        self.minute: int | None = None
+        self.window = window
+        self.current: int | None = None
         self.counts: dict[str, int] = {}
 
     def allows(self, person: str) -> bool:
-        """Counts one request of `person` and says whether it is within the limit of the minute."""
-        minute = int(self.clock() // WINDOW_SECONDS)
-        if minute != self.minute:
-            # A new minute: every count starts again, so the counts never grow beyond one minute.
-            self.minute = minute
+        """Counts one request of `person` and says whether it is within the limit of the window."""
+        current = int(self.clock() // self.window)
+        if current != self.current:
+            # A new window: every count starts again, so the counts never grow beyond one window.
+            self.current = current
             self.counts = {}
         self.counts[person] = self.counts.get(person, 0) + 1
         return self.counts[person] <= self.limit

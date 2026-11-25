@@ -15,11 +15,12 @@ PAUSE_AFTER_FAILURE = 30  # seconds
 
 
 class Cache:
-    def __init__(self, redis):
+    def __init__(self, redis, prefix: str | None = None):
         self.redis = redis
         # Each start of the gateway has keys of its own: a new version can change what an answer
-        # looks like, and what an older one kept must not be served. The old keys expire.
-        self.prefix = f"aireuskadi:gateway:{secrets.token_hex(4)}:"
+        # looks like, and what an older one kept must not be served. The old keys expire. The texts
+        # of the language model have a fixed prefix instead (insight.py): they survive a deployment.
+        self.prefix = prefix or f"aireuskadi:gateway:{secrets.token_hex(4)}:"
         self.paused_until = 0.0
 
     async def get(self, key: str) -> bytes | None:

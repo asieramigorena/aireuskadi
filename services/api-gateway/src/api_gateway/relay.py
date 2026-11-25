@@ -33,6 +33,8 @@ NOT_SENT = HOP_BY_HOP | {
     "x-forwarded-for",
     "x-real-ip",
     "forwarded",
+    # Who the person is, for the auth service: only the gateway says it (admin.py).
+    "x-person",
 }
 # httpx gives the body already uncompressed and Response counts its length again; the server of
 # the gateway writes its own date.

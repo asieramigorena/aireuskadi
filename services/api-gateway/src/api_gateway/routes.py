@@ -129,6 +129,12 @@ async def unit_card(request: Request, code: Annotated[str, Path(pattern=UNIT_COD
     """The card of the emissions service with, in `air_quality`, what the stations of the unit say.
     Without the air quality service the card still comes, with `null`; without the emissions
     service there is no card. Both are asked at the same time."""
+    return await compose_card(request, code)
+
+
+async def compose_card(request: Request, code: str) -> Response:
+    """The card of a unit (see unit_card). Also what the questions to the language model are about
+    (insight.py)."""
     card, stations = await asyncio.gather(
         ask(request, "emissions", f"/units/{code}"),
         ask(request, "air_quality", f"/units/{code}/stations"),
