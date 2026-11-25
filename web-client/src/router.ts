@@ -8,7 +8,12 @@ import { isLanguage, type Language } from "./i18n";
 export type Route =
   | { name: "home" }
   | { name: "unit"; code: string; station: number | null }
+  // The trend of the inventory 1990-2024 in the panel, by SNAP sectors or by NFR ones.
+  | { name: "trend"; classification: Classification }
   | { name: "not-found" };
+
+/** The two ways of splitting the inventory into sectors. */
+export type Classification = "SNAP" | "NFR";
 
 /** The map of the declared emissions, or the map of the air quality that the stations measure. */
 export type View = "emissions" | "air";
@@ -29,6 +34,14 @@ export interface State {
 
 export const DEFAULT_SELECTION: Selection = { view: "emissions", pollutant: "NOX", year: 2023 };
 
+// The year of the map when the address says none: the newest with emissions, once the API has said
+// which one it is (main.ts); until then the one of DEFAULT_SELECTION.
+let defaultYear = DEFAULT_SELECTION.year;
+
+export function setDefaultYear(year: number) {
+  defaultYear = year;
+}
+
 /** The pollutant of each view when the URL does not say one: the two do not measure the same. */
 export const DEFAULT_POLLUTANT: Record<View, string> = { emissions: "NOX", air: "NO2" };
 
@@ -43,19 +56,23 @@ const UNIT_PATH = /^\/unit\/([0-9]{2}|[0-9]{4}|[0-9]{5})$/;
 
 export function parseLocation(pathname: string, search: string): State {
   const query = new URLSearchParams(search);
-  const view: View = query.get("view") === "air" ? "air" : "emissions";
+  // The trend is of the inventory of emissions: the map behind it is always the one of the emissions.
+  const view: View = query.get("view") === "air" && pathname !== "/trend" ? "air" : "emissions";
   const pollutant = query.get("pollutant") ?? "";
   const year = query.get("year") ?? "";
   const lang = query.get("lang") ?? "";
   const selection: Selection = {
     view,
     pollutant: POLLUTANT.test(pollutant) ? pollutant : DEFAULT_POLLUTANT[view],
-    year: YEAR.test(year) && Number(year) >= 1 ? Number(year) : DEFAULT_SELECTION.year,
+    year: YEAR.test(year) && Number(year) >= 1 ? Number(year) : defaultYear,
     // Only a language that the page has, and only when there is one: the key is not there otherwise.
     ...(isLanguage(lang) ? { lang } : {}),
   };
 
   if (pathname === "/") return { route: { name: "home" }, selection };
+  if (pathname === "/trend") {
+    return { route: { name: "trend", classification: query.get("sectors") === "nfr" ? "NFR" : "SNAP" }, selection };
+  }
   const unit = UNIT_PATH.exec(pathname);
   if (unit) {
     const station = query.get("station") ?? "";
@@ -69,7 +86,7 @@ function selectionQuery(selection: Selection): string {
   if (selection.view === "air") query.set("view", "air");
   if (selection.pollutant !== DEFAULT_POLLUTANT[selection.view]) query.set("pollutant", selection.pollutant);
   // Only the emissions have a year.
-  if (selection.view === "emissions" && selection.year !== DEFAULT_SELECTION.year) {
+  if (selection.view === "emissions" && selection.year !== defaultYear) {
     query.set("year", String(selection.year));
   }
   if (selection.lang) query.set("lang", selection.lang);
@@ -86,6 +103,17 @@ export function unitUrl(code: string, selection: Selection, station: number | nu
 }
 
 export const homeUrl = (selection: Selection) => `/${selectionQuery(selection)}`;
+
+/** The address of the trend of the inventory. The map behind it is the one of the emissions (the
+ * inventory is of emissions): from the air quality it starts with the emissions by default. */
+export function trendUrl(selection: Selection, classification: Classification): string {
+  const map: Selection =
+    selection.view === "emissions" ? selection : { ...DEFAULT_SELECTION, year: selection.year, lang: selection.lang };
+  const query = new URLSearchParams(selectionQuery(map));
+  if (classification === "NFR") query.set("sectors", "nfr");
+  const text = query.toString();
+  return `/trend${text ? `?${text}` : ""}`;
+}
 
 export function createRouter(win: Window, onChange: (state: State) => void) {
   const read = () => parseLocation(win.location.pathname, win.location.search);

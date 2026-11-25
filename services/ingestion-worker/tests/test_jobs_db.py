@@ -7,7 +7,7 @@ import re
 from datetime import UTC, datetime, timedelta
 
 from aireuskadi_db import IngestionRun
-from fakes import FILE, fake_fetch
+from fakes import FILE, fake_fetch, inventory_fetch, inventory_files
 from ingestion_worker.jobs import default_jobs
 from ingestion_worker.scheduler import RunHistory
 from sqlalchemy import select
@@ -27,6 +27,7 @@ def test_the_jobs_are_the_ones_of_the_issue_with_their_intervals_and_what_they_w
         ("boundaries", timedelta(days=30), ()),
         ("eprtr_air", timedelta(days=30), ("boundaries",)),
         ("measurements", timedelta(hours=1), ("boundaries",)),
+        ("inventory", timedelta(days=30), ()),
     ]
 
 
@@ -69,3 +70,35 @@ def test_the_eprtr_job_loads_the_year_it_has_and_the_next_one_if_the_register_pu
             select(IngestionRun).where(IngestionRun.source == "eprtr_air").order_by(IngestionRun.id)
         ).all()
         assert [r.status for r in runs[-2:]] == ["succeeded", "succeeded"]
+
+
+def inventory_runs(engine):
+    with Session(engine) as session:
+        query = select(IngestionRun).where(IngestionRun.source == "inventory")
+        return session.scalars(query.order_by(IngestionRun.id)).all()
+
+
+def test_the_inventory_job_loads_the_newest_edition_and_then_skips_it_while_it_is_the_same(engine):
+    fetch = inventory_fetch(inventory_files(edition=2025), year=2025)
+    jobs = default_jobs(
+        engine, fetch=fetch, inventory_exists=lambda year: year == 2025, now=lambda: NOW
+    )
+
+    job(jobs, "inventory").run()
+    job(jobs, "inventory").run()
+
+    assert [(r.status, r.rows_loaded > 0) for r in inventory_runs(engine)] == [
+        ("succeeded", True),
+        ("succeeded", False),
+    ]
+
+
+def test_the_inventory_job_does_nothing_while_no_edition_is_published(engine):
+    def fetch(url):
+        raise AssertionError(f"nothing should be downloaded: {url}")
+
+    jobs = default_jobs(engine, fetch=fetch, inventory_exists=lambda year: False, now=lambda: NOW)
+
+    job(jobs, "inventory").run()
+
+    assert inventory_runs(engine) == []

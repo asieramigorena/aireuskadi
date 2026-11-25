@@ -9,8 +9,12 @@ import { INVALID_REQUEST, NOT_FOUND, problem } from "./problems.ts";
 import { ATTRIBUTION, pointGeometry } from "./stations.ts";
 import { UNITS, UNIT_CODE } from "./units.ts";
 
+// A station is recent when its latest value is from the last days: one that stopped (or only
+// sends the weather) is said to be so, instead of showing nothing.
+const RECENT_DAYS = 7;
+
 const STATIONS = `
-  SELECT s.id, s.code, s.name, ST_AsGeoJSON(s.geom, 6)::json AS geometry
+  SELECT s.id, s.code, s.name, ST_AsGeoJSON(s.geom, 6)::json AS geometry, s.meteo_only
   FROM core.station s
   WHERE s.municipality_code = $1
   ORDER BY s.code`;
@@ -23,16 +27,19 @@ interface StationRow {
   code: string;
   name: string;
   geometry: { type: string; coordinates: number[] } | null;
+  meteo_only: boolean;
 }
 
 const station = {
   type: "object",
-  required: ["id", "code", "name", "geometry", "readings"],
+  required: ["id", "code", "name", "geometry", "meteo_only", "recent", "readings"],
   properties: {
     id: { type: "integer" },
     code: { type: "string" },
     name: { type: "string" },
     geometry: pointGeometry,
+    meteo_only: { type: "boolean", description: "True if the station only sends the weather: it measures no pollutant." },
+    recent: { type: "boolean", description: `True if the latest value of a pollutant of the station is from the last ${RECENT_DAYS} days.` },
     readings: {
       type: "array",
       description: "The latest hourly value of each pollutant the station measures, ordered by pollutant. Empty if it has none.",
@@ -101,6 +108,8 @@ export async function unitStationRoutes(app: FastifyInstance, { db }: { db: Db }
       const rows = (await db.query<Row>(LATEST, [codes, code])).rows;
       const byStation = new Map<number, Row[]>();
       for (const row of rows) byStation.set(row.id, [...(byStation.get(row.id) ?? []), row]);
+      // From the latest values that are already here: no other query of the measurements.
+      const since = Date.now() - RECENT_DAYS * 24 * 3600 * 1000;
 
       return {
         ...base,
@@ -111,6 +120,8 @@ export async function unitStationRoutes(app: FastifyInstance, { db }: { db: Db }
           code: row.code,
           name: row.name,
           geometry: row.geometry,
+          meteo_only: row.meteo_only,
+          recent: (byStation.get(row.id) ?? []).some((reading) => reading.ts.getTime() > since),
           readings: (byStation.get(row.id) ?? []).map((r) => ({ pollutant: r.pollutant, ...reading(r) })),
         })),
       };

@@ -1,7 +1,7 @@
 # Promote dev to pro from the pull request.
 # Put the label "promote" on a pull request from dev into pro, or comment "/promote" on it.
 # The workflow checks the pull request, publishes the images of its last commit to GHCR
-# (Watchtower on the VM pulls them) and then merges it with a merge commit.
+# (the timer of the VM pulls them, deploy/update.sh) and then merges it with a merge commit.
 # If any step fails nothing is merged; remove and add the label again, or comment again, to retry.
 # A comment only triggers the version of this file that is on main, so the first promotion
 # has to use the label.

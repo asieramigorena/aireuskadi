@@ -21,7 +21,7 @@ URL = os.environ.get("DATABASE_URL")
 
 pytestmark = pytest.mark.skipif(not URL, reason="DATABASE_URL is not set")
 
-HEAD = "0003"
+HEAD = "0005"
 
 # What create_all() used to make: the tables of core (the accounts, in auth, came with 0003).
 CORE_TABLES = [table for table in Base.metadata.sorted_tables if table.schema == SCHEMA]
@@ -86,6 +86,8 @@ def test_a_database_made_before_the_migrations_is_marked_and_not_made_again(empt
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
         conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}"))
         Base.metadata.create_all(conn, tables=CORE_TABLES)
+        # A column that came later with its own migration (0004) was not there before.
+        conn.execute(text(f"ALTER TABLE {SCHEMA}.station DROP COLUMN meteo_only"))
         for statement in UNIT_INDICATOR_DDL.split(";"):
             if statement.strip():
                 conn.execute(text(statement))
@@ -122,6 +124,8 @@ def test_a_database_made_before_without_the_indexes_of_the_simplified_boundaries
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
         conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}"))
         Base.metadata.create_all(conn, tables=CORE_TABLES)
+        # A column that came later with its own migration (0004) was not there before.
+        conn.execute(text(f"ALTER TABLE {SCHEMA}.station DROP COLUMN meteo_only"))
         for statement in UNIT_INDICATOR_DDL.split(";"):
             if statement.strip():
                 conn.execute(text(statement))
@@ -139,3 +143,21 @@ def test_a_database_made_before_without_the_indexes_of_the_simplified_boundaries
     assert {
         f"idx_{t}_geom_simplified" for t in ("territory", "district", "municipality")
     } <= indexes
+
+
+def test_the_time_of_the_measurements_has_a_brin_index(empty_engine):
+    # The measurements grow every hour and are asked by time (the latest ones, a year, a range):
+    # a BRIN index is tiny and is enough because the rows come in the order of their time.
+    migrate(empty_engine)
+
+    with empty_engine.connect() as conn:
+        definitions = (
+            conn.execute(
+                text(
+                    "SELECT indexdef FROM pg_indexes WHERE schemaname = 'core' AND tablename = 'measurement'"
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert any("USING brin (ts)" in definition for definition in definitions)

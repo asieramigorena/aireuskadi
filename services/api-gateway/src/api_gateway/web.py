@@ -1,7 +1,8 @@
 """The compiled web page, which is what `npm run build` makes in web-client/dist.
 
-It is an explicit list, like the one of the API, and not a server of files: the page at `/` and at
-`/unit/<code>` (the code of a territory, a district or a municipality), and the files that the build
+It is an explicit list, like the one of the API, and not a server of files: the page at `/`, at
+`/unit/<code>` (the code of a territory, a district or a municipality) and at `/trend` (the trend of
+the inventory), and the files that the build
 names inside `/assets`. A file of the folder that is not in the list is not published, and a name
 cannot walk out of the folder.
 """
@@ -69,6 +70,10 @@ def web_router(web_dir: Path) -> APIRouter:
     def unit(code: str) -> FileResponse:
         if not UNIT_CODE.fullmatch(code):
             raise StarletteHTTPException(404, "Not Found")
+        return page()
+
+    @router.api_route("/trend", methods=READ, include_in_schema=False)
+    def trend() -> FileResponse:
         return page()
 
     @router.api_route("/assets/{name}", methods=READ, include_in_schema=False)

@@ -86,6 +86,21 @@ def test_if_one_province_fails_the_run_is_failed_and_nothing_stays_not_even_the_
     assert count(engine, "SELECT count(*) FROM core.measurement") == measurements_before
 
 
+def test_if_no_province_sends_any_hour_the_run_is_failed(engine, boundaries):
+    # One empty province can happen; all three at once means the API is not giving data.
+    ok = fake_fetch()
+
+    def fetch(url):
+        return b"[]" if "/counties/" in url else ok(url)
+
+    with pytest.raises(ValueError, match="no hours"):
+        run_measurements(engine, now=NOW, fetch=fetch)
+
+    with Session(engine) as session:
+        run = session.scalars(select(IngestionRun).order_by(IngestionRun.id.desc())).first()
+        assert (run.source, run.status) == ("measurements", "failed")
+
+
 def test_running_it_again_every_hour_does_not_duplicate_anything(engine, boundaries):
     run_measurements(engine, now=NOW, fetch=fake_fetch())
     run_measurements(engine, now=NOW, fetch=fake_fetch())
@@ -99,3 +114,15 @@ def test_running_it_again_every_hour_does_not_duplicate_anything(engine, boundar
         )
         == 2
     )
+
+
+def test_a_run_says_whether_each_station_only_sends_the_weather(engine, boundaries):
+    # The station of the fake county sends NO2: a flag left at true must come back to false.
+    run_measurements(engine, now=NOW, fetch=fake_fetch())
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE core.station SET meteo_only = true WHERE code = 'T-1'"))
+
+    run_measurements(engine, now=NOW, fetch=fake_fetch())
+
+    with Session(engine) as session:
+        assert session.scalar(select(Station.meteo_only).where(Station.code == "T-1")) is False

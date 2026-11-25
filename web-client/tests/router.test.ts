@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { createRouter, homeUrl, parseLocation, unitUrl, type Selection } from "../src/router";
+import { DEFAULT_SELECTION, createRouter, homeUrl, parseLocation, setDefaultYear, trendUrl, unitUrl, type Selection } from "../src/router";
 
 const emissions = (pollutant: string, year: number): Selection => ({ view: "emissions", pollutant, year });
 const air = (pollutant: string): Selection => ({ view: "air", pollutant, year: 2023 });
@@ -69,6 +69,19 @@ describe("homeUrl", () => {
     expect(homeUrl(emissions("NOX", 2023))).toBe("/");
     expect(homeUrl(emissions("CO", 2019))).toBe("/?pollutant=CO&year=2019");
     expect(homeUrl(emissions("NOX", 2020))).toBe("/?year=2020");
+  });
+});
+
+describe("the year when the address says none", () => {
+  afterEach(() => setDefaultYear(DEFAULT_SELECTION.year));
+
+  test("is the newest with emissions once it is known, and an address keeps a year only if it is another", () => {
+    setDefaultYear(2024);
+
+    expect(parseLocation("/", "").selection.year).toBe(2024);
+    expect(parseLocation("/", "?year=2023").selection.year).toBe(2023);
+    expect(homeUrl(emissions("NOX", 2024))).toBe("/");
+    expect(homeUrl(emissions("NOX", 2023))).toBe("/?year=2023");
   });
 });
 
@@ -174,6 +187,35 @@ describe("the view of the map", () => {
     for (const selection of [emissions("CO", 2019), emissions("NOX", 2023), air("NO2"), air("SO2")]) {
       expect(parseLocation("/", homeUrl(selection).slice(1)).selection).toEqual(selection);
     }
+  });
+});
+
+describe("the trend of the inventory", () => {
+  test("/trend is its panel, with the SNAP sectors unless the address asks for the NFR ones", () => {
+    expect(parseLocation("/trend", "").route).toEqual({ name: "trend", classification: "SNAP" });
+    expect(parseLocation("/trend", "?sectors=nfr").route).toEqual({ name: "trend", classification: "NFR" });
+    expect(parseLocation("/trend", "?sectors=other").route).toEqual({ name: "trend", classification: "SNAP" });
+  });
+
+  test("its address keeps the map behind it, and says the NFR sectors only when they are chosen", () => {
+    expect(trendUrl(emissions("SOX", 2021), "SNAP")).toBe("/trend?pollutant=SOX&year=2021");
+    expect(trendUrl(emissions("NOX", 2023), "NFR")).toBe("/trend?sectors=nfr");
+  });
+
+  test("the map behind it is always the one of the emissions: the inventory is of emissions", () => {
+    expect(trendUrl(air("NO2"), "SNAP")).toBe("/trend");
+  });
+
+  test("on /trend the map is the one of the emissions even if the address asks for the air: the pollutant is kept", () => {
+    expect(parseLocation("/trend", "?view=air&pollutant=PM10").selection).toEqual(emissions("PM10", 2023));
+  });
+
+  test("what the address says is what is read back", () => {
+    const url = new URL(trendUrl(emissions("PM10", 2020), "NFR"), "http://x");
+    expect(parseLocation(url.pathname, url.search)).toEqual({
+      route: { name: "trend", classification: "NFR" },
+      selection: emissions("PM10", 2020),
+    });
   });
 });
 

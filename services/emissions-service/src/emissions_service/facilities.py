@@ -44,6 +44,33 @@ class FacilityOut(BaseModel):
     emissions: list[FacilityEmissionOut]
 
 
+@router.get("/facilities/years")
+def facility_years(session: SessionDep) -> list[int]:
+    """The years that have emissions in the register, the oldest first: the years of the map."""
+    query = select(FacilityEmission.year).distinct().order_by(FacilityEmission.year)
+    return list(session.scalars(query))
+
+
+class PollutantNameOut(BaseModel):
+    code: str
+    name: str
+
+
+@router.get("/facilities/pollutants")
+def facility_pollutants(session: SessionDep) -> list[PollutantNameOut]:
+    """The pollutants that have emissions in the register, by code: the pollutants of the map."""
+    query = (
+        select(Pollutant.code, Pollutant.name)
+        .where(
+            select(FacilityEmission.facility_id)
+            .where(FacilityEmission.pollutant_code == Pollutant.code)
+            .exists()
+        )
+        .order_by(Pollutant.code)
+    )
+    return [PollutantNameOut(code=code, name=name) for code, name in session.execute(query)]
+
+
 @router.get("/facilities/points", responses=INVALID_REQUEST)
 def facility_points(
     session: SessionDep,

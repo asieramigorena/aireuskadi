@@ -37,7 +37,23 @@ discovery.relabel "containers" {
 loki.source.docker "containers" {
   host       = "unix:///var/run/docker.sock"
   targets    = discovery.relabel.containers.output
+  forward_to = [loki.process.noise.receiver]
+}
+
+// Lines that are not a problem of AirEuskadi are dropped before they reach Loki. The tunnel
+// (Tailscale Funnel) writes "http: TLS handshake error from ...: EOF" every time someone opens a
+// connection and closes it before TLS is done (scanners, a browser that opens a spare connection):
+// nothing reached the gateway. Only the ones that end in EOF: any other TLS error (a certificate
+// that expired, for example) stays, because then nobody can open the page. They are counted in
+// loki_process_dropped_lines_total.
+loki.process "noise" {
   forward_to = [loki.write.loki.receiver]
+
+  stage.match {
+    selector            = "{service=\"tunnel\"} |~ \"TLS handshake error from .*: EOF[[:space:]]*$\""
+    action              = "drop"
+    drop_counter_reason = "tls_handshake_not_finished"
+  }
 }
 
 loki.write "loki" {

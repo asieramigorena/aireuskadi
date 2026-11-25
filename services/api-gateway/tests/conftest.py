@@ -51,6 +51,12 @@ def grafana():
 
 
 @pytest.fixture
+def insight():
+    """The insight service (the questions to the language model)."""
+    return FakeUpstream()
+
+
+@pytest.fixture
 def admin_client(upstreams, auth, grafana):
     """A gateway with the auth service and Grafana behind it. HTTPS, as the browser reaches it."""
     emissions_client, air_quality_client = upstreams

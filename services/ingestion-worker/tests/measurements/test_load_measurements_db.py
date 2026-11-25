@@ -10,7 +10,7 @@ from aireuskadi_db import Measurement, Station
 from conftest import layers
 from ingestion_worker.boundaries.layers import load_boundaries
 from ingestion_worker.common.pollutants import seed_pollutants
-from ingestion_worker.measurements.load import load_measurements, load_stations
+from ingestion_worker.measurements.load import load_measurements, load_stations, mark_meteo_only
 from ingestion_worker.measurements.parse import MeasurementRecord
 from ingestion_worker.measurements.stations import StationRecord
 from sqlalchemy import func, select
@@ -154,3 +154,26 @@ def test_the_same_value_twice_in_one_load_keeps_the_last_instead_of_failing(sess
 
     (row,) = stored(session, station_id=good_station_id(session))
     assert float(row.value) == 25.0
+
+
+def test_mark_meteo_only_sets_the_flag_of_each_station_both_ways(session, reference):
+    load_stations(session, [station(code="T-1"), station(code="T-2")])
+    mark_meteo_only(session, {"T-2": True})
+
+    mark_meteo_only(session, {"T-1": True, "T-2": False, "T-unknown": True})
+
+    flags = dict(
+        session.execute(
+            select(Station.code, Station.meteo_only).where(Station.code.like("T-%"))
+        ).all()
+    )
+    assert flags == {"T-1": True, "T-2": False}
+
+
+def test_a_station_that_sent_nothing_keeps_what_it_was(session, reference):
+    load_stations(session, [station(code="T-1")])
+    mark_meteo_only(session, {"T-1": True})
+
+    mark_meteo_only(session, {})
+
+    assert session.scalar(select(Station.meteo_only).where(Station.code == "T-1")) is True

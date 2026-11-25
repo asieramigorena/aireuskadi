@@ -1,0 +1,12 @@
+# Runs aireuskadi-update.service five minutes after the VM starts and then every five minutes (see
+# that file for how to install both).
+[Unit]
+Description=AirEuskadi: bring the VM up to date with the branch pro every five minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+Unit=aireuskadi-update.service
+
+[Install]
+WantedBy=timers.target

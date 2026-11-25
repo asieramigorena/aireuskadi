@@ -59,6 +59,74 @@ describe("the calls go only to the gateway, to the routes of /api/v1", () => {
     expect(Object.fromEntries(url.searchParams)).toEqual({ level: "territory" });
   });
 
+  test("the years of the register that have emissions, and only what can be a year", async () => {
+    const { api, fetchFn } = apiWith(answer([2019, 2020, "x", 2021.5, 0, 1e999, null]));
+
+    // The newest becomes the year of the map and goes in its addresses: never NaN or Infinity.
+    expect(await api.years()).toEqual([2019, 2020]);
+
+    expect(urlOf(fetchFn).pathname).toBe("/api/v1/facilities/years");
+  });
+
+  test("the questions carry the provider and the model in the address and the key only in a header", async () => {
+    const llm = { provider: "groq", model: "openai/gpt-oss-120b", key: "gsk-secret-1" };
+    const { api, fetchFn } = apiWith(answer({ text: "x", model: "m" }));
+
+    await api.insight("48020", "summary", "es", 2023, llm);
+
+    const url = urlOf(fetchFn);
+    expect(url.pathname).toBe("/api/v1/units/48020/insight");
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      question: "summary", lang: "es", year: "2023", provider: "groq", model: "openai/gpt-oss-120b",
+    });
+    expect(String(fetchFn.mock.calls[0][0])).not.toContain("gsk-secret-1");
+    expect(new Headers(fetchFn.mock.calls[0][1]?.headers).get("X-LLM-Key")).toBe("gsk-secret-1");
+
+    const second = apiWith(answer({ text: "x", model: "m" }));
+    await second.api.generalInsight("pollutant:NO2", "eu", llm);
+    expect(urlOf(second.fetchFn).pathname).toBe("/api/v1/insights/pollutant%3ANO2");
+  });
+
+  test("the models of a provider: the provider in the address, the key only in a header", async () => {
+    const { api, fetchFn } = apiWith(answer({ models: ["a", "b"] }));
+
+    expect(await api.models("groq", "gsk-secret-1")).toEqual(["a", "b"]);
+
+    const url = urlOf(fetchFn);
+    expect(url.pathname).toBe("/api/v1/llm/models");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ provider: "groq" });
+    expect(new Headers(fetchFn.mock.calls[0][1]?.headers).get("X-LLM-Key")).toBe("gsk-secret-1");
+  });
+
+  test("who is logged in comes from /user/me: the name, or null", async () => {
+    const logged = apiWith(answer({ username: "user1" }));
+    expect(await logged.api.me()).toBe("user1");
+    expect(urlOf(logged.fetchFn).pathname).toBe("/user/me");
+
+    expect(await apiWith(answer({ detail: "Not logged in." }, 401)).api.me()).toBeNull();
+    expect(await apiWith(new Error("down")).api.me()).toBeNull();
+  });
+
+  test("the trend of the inventory of a pollutant, by the sectors of a classification", async () => {
+    const answer_ = { attribution: "x", pollutant: "NOX", unit: "t", classification: "NFR", series: [] };
+    const { api, fetchFn } = apiWith(answer(answer_));
+
+    expect(await api.inventory("NOX", "NFR")).toEqual(answer_);
+
+    const url = urlOf(fetchFn);
+    expect(url.pathname).toBe("/api/v1/inventory");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ pollutant: "NOX", classification: "NFR" });
+  });
+
+  test("the pollutants of the register that have emissions", async () => {
+    const list = [{ code: "NOX", name: "Oxides of nitrogen (NOx)" }];
+    const { api, fetchFn } = apiWith(answer(list));
+
+    expect(await api.pollutants()).toEqual(list);
+
+    expect(urlOf(fetchFn).pathname).toBe("/api/v1/facilities/pollutants");
+  });
+
   test("the card of one unit", async () => {
     const card = { code: "01036", level: "municipality", name: "Laudio", emissions: [] };
     const { api, fetchFn } = apiWith(answer(card));

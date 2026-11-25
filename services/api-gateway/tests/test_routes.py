@@ -5,9 +5,12 @@ import pytest
 ROUTES = [
     ("/api/v1/pollutants", "/pollutants"),
     ("/api/v1/facilities/points?pollutant=NOX&year=2023", "/facilities/points"),
+    ("/api/v1/facilities/years", "/facilities/years"),
+    ("/api/v1/facilities/pollutants", "/facilities/pollutants"),
     ("/api/v1/facilities/12", "/facilities/12"),
     ("/api/v1/units?level=municipality&pollutant=NOX&year=2023", "/units"),
     ("/api/v1/units/boundaries?level=municipality", "/units/boundaries"),
+    ("/api/v1/inventory?pollutant=NOX&classification=SNAP&from=1990&to=2024", "/inventory"),
 ]  # the card of a unit (/units/<code>) is put together from two services: test_unit_card_composition.py
 
 
@@ -46,7 +49,7 @@ def test_the_parameters_of_a_route_travel_to_the_emissions_service(client, emiss
         "/api/v1/health",
         "/api/v1/openapi.json",
         "/api/v1/docs",
-        "/api/v1/inventory",
+        "/api/v1/inventory/",
         "/api/v1/pollutants/",
         "/api/v1/units/",
         "/api/v1/units/01036/extra",

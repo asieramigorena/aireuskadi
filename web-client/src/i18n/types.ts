@@ -22,8 +22,8 @@ export interface Texts {
   // The page.
   mapChoiceLabel: string;
   languageChoiceLabel: string;
-  /** The link of the header to the login of the admins (Grafana and the accounts). */
-  adminLink: string;
+  /** The link of the header to the login (/user): anyone can log in or sign up there. */
+  loginLink: string;
   panelLabel: string;
   emissionsCredit: string;
   airCredit: (attribution: string) => string;
@@ -40,6 +40,8 @@ export interface Texts {
   viewEmissions: string;
   viewAir: string;
   airPollutantLabel: string;
+  yearLabel: string;
+  emissionPollutantLabel: string;
   mapLabelEmissions: string;
   mapLabelAir: string;
   captionEmissions: (pollutant: string, year: number) => string;
@@ -64,7 +66,8 @@ export interface Texts {
   columns: { pollutant: string; declared: string; perKm2: string; guideline: string; latest: string };
   airQuality: string;
   airUnavailable: string;
-  noValues: string;
+  meteoStation: string;
+  noRecentReadings: string;
   latestValue: (hour: string) => string;
   noMeasurement: { no_station: string; no_data: string; level_not_supported: string; other: string };
 
@@ -82,4 +85,50 @@ export interface Texts {
   // the emissions): the other languages name each code, and the API name is the fallback.
   airPollutants: Record<AirCode, string>;
   pollutants: Record<string, string>;
+  // The trend of the inventory (GET /inventory).
+  trendLink: string;
+  trendTableCaption: (year: number) => string;
+  trendTitle: (pollutant: string, from: number, to: number) => string;
+  trendSummary: (first: string, from: number, last: string, to: number) => string;
+  inventoryPollutantLabel: string;
+  sectorsLabel: string;
+  methaneTotalOnly: string;
+  noInventory: string;
+  nfrParticlesNote: string;
+
+  // The questions to a language model about a unit (insight-service).
+  /** The line that opens the box of the questions, in its corner of the map. */
+  askTitle: string;
+  askChooseUnit: string;
+  /** After a question about a unit while none is open, in brackets. */
+  askNeedsUnit: string;
+  askHeading: (name: string) => string;
+  askChoiceLabel: string;
+  askButton: string;
+  askWriting: string;
+  askNotAvailable: string;
+  askTooMany: string;
+  askLogIn: string;
+  askLogInLink: string;
+  askSignUpLink: string;
+  askLoadingModels: string;
+  askNeedKey: string;
+  askKeyRefused: string;
+  providerLabel: string;
+  modelLabel: string;
+  keyLabel: string;
+  /** Under the field of the key: where it is kept (only the tab) and for how long. */
+  keyNote: string;
+  /** Under every text that a model wrote: it can be wrong, the figures are the data. */
+  generatedNote: string;
+  questionSummary: string;
+  questionMeaning: string;
+  questionWhoRatio: string;
+  questionDensity: string;
+  questionPollutant: (name: string) => string;
+  /** The names of the pollutants of the inventory. */
+  inventoryPollutants: Record<string, string>;
+  /** The names of the sectors, by classification and code ("SNAP-07", "NFR-1"); a sector that is not
+   * here keeps the name of the source (in Spanish). */
+  sectors: Record<string, string>;
 }

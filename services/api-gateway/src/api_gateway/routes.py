@@ -86,6 +86,16 @@ async def pollutants(request: Request):
     return await ask(request, "emissions", "/pollutants")
 
 
+@router.get("/facilities/years")
+async def facility_years(request: Request):
+    return await ask(request, "emissions", "/facilities/years")
+
+
+@router.get("/facilities/pollutants")
+async def facility_pollutants(request: Request):
+    return await ask(request, "emissions", "/facilities/pollutants")
+
+
 @router.get("/facilities/points")
 async def facility_points(request: Request):
     return await ask(request, "emissions", "/facilities/points", ("pollutant", "year"))
@@ -108,11 +118,23 @@ async def unit_boundaries(request: Request):
     return await ask(request, "emissions", "/units/boundaries", ("level",))
 
 
+@router.get("/inventory")
+async def inventory(request: Request):
+    names = ("pollutant", "classification", "sector", "from", "to")
+    return await ask(request, "emissions", "/inventory", names)
+
+
 @router.get("/units/{code}")
 async def unit_card(request: Request, code: Annotated[str, Path(pattern=UNIT_CODE)]):
     """The card of the emissions service with, in `air_quality`, what the stations of the unit say.
     Without the air quality service the card still comes, with `null`; without the emissions
     service there is no card. Both are asked at the same time."""
+    return await compose_card(request, code)
+
+
+async def compose_card(request: Request, code: str) -> Response:
+    """The card of a unit (see unit_card). Also what the questions to the language model are about
+    (insight.py)."""
     card, stations = await asyncio.gather(
         ask(request, "emissions", f"/units/{code}"),
         ask(request, "air_quality", f"/units/{code}/stations"),

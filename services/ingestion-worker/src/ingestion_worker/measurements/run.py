@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from ingestion_worker.common.download import download
 from ingestion_worker.common.runs import track_run
 from ingestion_worker.common.view import refresh_unit_indicator
-from ingestion_worker.measurements.load import load_measurements, load_stations
+from ingestion_worker.measurements.load import load_measurements, load_stations, mark_meteo_only
 from ingestion_worker.measurements.parse import parse_measurements
 from ingestion_worker.measurements.stations import parse_stations
 
@@ -47,22 +47,29 @@ def run_measurements(
     start, end = start.strftime(MINUTE), now.strftime(MINUTE)
 
     def work(session: Session, run: IngestionRun) -> None:
+        # Everything is downloaded before anything is written: with the retries a download can take
+        # minutes, and no row of the database stays locked while it waits.
         stations_file = fetch(f"{API}/stations")
-        stations = parse_stations(stations_file.decode())
-        stations_left_out = load_stations(session, stations.accepted)
+        county_files = [fetch(HOURLY.format(county=c, start=start, end=end)) for c in COUNTIES]
 
-        files = [stations_file]
-        values, tried, rejected_parsing = [], 0, 0
-        for county in COUNTIES:
-            file = fetch(HOURLY.format(county=county, start=start, end=end))
-            files.append(file)
+        stations = parse_stations(stations_file.decode())
+        values, tried, rejected_parsing, kinds, hours_sent = [], 0, 0, {}, 0
+        for file in county_files:
             parsed = parse_measurements(file.decode())
             values += parsed.accepted
             tried += parsed.rows_read
             rejected_parsing += len(parsed.rejected)
-        values_left_out = load_measurements(session, values)
+            kinds.update(parsed.meteo_only)  # each station is in one county only
+            hours_sent += parsed.hours
+        # One empty county can happen; all three at once means the API is giving no data.
+        if hours_sent == 0:
+            raise ValueError("the measurements answer has no hours in any county")
 
-        run.file_hash = hashlib.sha256(b"".join(files)).hexdigest()
+        stations_left_out = load_stations(session, stations.accepted)
+        values_left_out = load_measurements(session, values)
+        mark_meteo_only(session, kinds)
+
+        run.file_hash = hashlib.sha256(stations_file + b"".join(county_files)).hexdigest()
         run.rows_read = len(stations.accepted) + len(stations.rejected) + tried
         run.rows_loaded = (len(stations.accepted) - len(stations_left_out)) + (
             len(values) - len(values_left_out)

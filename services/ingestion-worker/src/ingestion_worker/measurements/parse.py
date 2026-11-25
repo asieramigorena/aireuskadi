@@ -3,6 +3,7 @@
 import csv
 import json
 import logging
+import math
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from importlib import resources
@@ -39,6 +40,9 @@ class MeasurementsResult:
     accepted: list[MeasurementRecord] = field(default_factory=list)
     rejected: list[RejectedValue] = field(default_factory=list)
     skipped: int = 0  # values that are not data: placeholders, weather and "no data"
+    hours: int = 0  # hours in the answer, measured or not
+    # Station code -> True if everything it sent is the weather (it measures no pollutant).
+    meteo_only: dict[str, bool] = field(default_factory=dict)
 
     @property
     def rows_read(self) -> int:
@@ -76,28 +80,48 @@ def _reject(result: MeasurementsResult, station: str, ts: datetime, name: str, r
 def parse_measurements(text: str) -> MeasurementsResult:
     names = _names()
     result = MeasurementsResult()
-    for hour in json.loads(text):
+    document = json.loads(text)
+    # The whole answer must be a list of hours, each with its date and its stations. If not, the
+    # API changed and nothing of it is loaded (a value without its unit is only that row: below).
+    if not isinstance(document, list) or not all(
+        isinstance(hour, dict) and "date" in hour and "station" in hour for hour in document
+    ):
+        raise ValueError("the measurements answer changed: it is not a list of hours")
+    result.hours = len(document)
+    for hour in document:
         ts = datetime.fromisoformat(hour["date"]).astimezone(UTC)
         for station in hour["station"]:
             # The hours that have not been measured yet come as zeros, without this qualification.
             placeholder = "airQualityStation" not in station
+            # Every hour counts, placeholders too: a pollutant in any of them is enough.
+            sent = {measurement.get("name") for measurement in station["measurements"]}
+            if sent:
+                weather = sent <= NOT_POLLUTANTS
+                result.meteo_only[station["id"]] = (
+                    result.meteo_only.get(station["id"], True) and weather
+                )
             for measurement in station["measurements"]:
                 if (
                     placeholder
-                    or measurement["name"] in NOT_POLLUTANTS
+                    or measurement.get("name") in NOT_POLLUTANTS
                     or measurement.get("airquality") == NO_DATA
                 ):
                     result.skipped += 1
                     continue
-                name = measurement["name"]
+                name = measurement.get("name")
                 if name not in names:
                     reason = f"pollutant name {name!r} is not known"
                     _reject(result, station["id"], ts, name, reason)
                     continue
                 try:
-                    value = float(measurement["value"])
+                    value = float(measurement.get("value"))
                 except (TypeError, ValueError):
+                    value = math.nan
+                if not math.isfinite(value):  # float() also takes "NaN" and "inf"
                     _reject(result, station["id"], ts, name, "value is not a number")
+                    continue
+                if not measurement.get("unit"):
+                    _reject(result, station["id"], ts, name, "unit is missing")
                     continue
                 pollutant, averaging = names[name]
                 result.accepted.append(

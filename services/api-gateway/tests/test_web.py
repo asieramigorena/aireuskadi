@@ -1,6 +1,6 @@
 """The compiled web page: what the gateway serves from the folder that `npm run build` makes.
 
-It is an explicit list, like the one of the API: the page at `/` and at `/unit/<code>`, and the
+It is an explicit list, like the one of the API: the page at `/`, at `/unit/<code>` and at `/trend`, and the
 files that the build names inside `/assets`. A file of the folder that is not in the list is not
 published, and a name cannot walk out of the folder.
 """
@@ -8,8 +8,8 @@ published, and a name cannot walk out of the folder.
 import pytest
 
 
-@pytest.mark.parametrize("path", ["/", "/unit/01036", "/unit/9901", "/unit/48"])
-def test_the_page_is_served_at_the_root_and_at_each_unit(web_client, web_dir, path):
+@pytest.mark.parametrize("path", ["/", "/unit/01036", "/unit/9901", "/unit/48", "/trend"])
+def test_the_page_is_served_at_the_root_at_each_unit_and_at_the_trend(web_client, web_dir, path):
     response = web_client.get(path)
 
     assert response.status_code == 200
@@ -36,6 +36,8 @@ def test_the_page_is_always_asked_for_again_before_it_is_used(web_client):
         "/unit",
         "/units/01036",
         "/index.html",
+        "/trend/",
+        "/trend/extra",
         "/other",
     ],
 )

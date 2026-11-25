@@ -72,8 +72,9 @@ describe("the language in use", () => {
 
 /** Every text of a dictionary that is a string, with the path to it: the functions and the tables of names are left. */
 function strings(value: unknown, path = ""): [string, string][] {
-  // The table of the names of the emissions is checked on its own: English has none.
-  if (path === "pollutants") return [];
+  // The tables of the names of the emissions and of the sectors are checked on their own: English has
+  // no names of the emissions, and Spanish keeps the names of the sectors of the source.
+  if (path === "pollutants" || path === "sectors") return [];
   if (typeof value === "string") return [[path, value]];
   if (value && typeof value === "object") {
     return Object.entries(value).flatMap(([key, inner]) => strings(inner, path ? `${path}.${key}` : key));
@@ -139,6 +140,13 @@ describe("what is translated is not left in English", () => {
 
   test.each(["eu", "es"] as const)("%s has the same texts as English, no more and no fewer", (code) => {
     expect(strings(textsOf(code)).map(([path]) => path).sort()).toEqual([...english.keys()].sort());
+  });
+});
+
+describe("the names of the sectors of the inventory", () => {
+  test("Basque names every sector that English names, and Spanish keeps the ones of the source", () => {
+    expect(Object.keys(textsOf("eu").sectors).sort()).toEqual(Object.keys(textsOf("en").sectors).sort());
+    expect(Object.keys(textsOf("es").sectors)).toEqual(["TOTAL-TOTAL"]);
   });
 });
 
