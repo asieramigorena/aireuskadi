@@ -13,6 +13,7 @@ import { createMap } from "./map";
 import { applyPageTexts, setAccountName } from "./page";
 import { askFor, renderAsk, type AskFn } from "./ask";
 import { renderPanel, type PanelView } from "./panel";
+import { destroySeriesCharts, type SeriesFn } from "./series";
 import { createRouter, homeUrl, parseLocation, setDefaultYear, unitUrl, type Classification, type Selection, type State } from "./router";
 import { maxDensity } from "./scale";
 import type { BoundaryCollection, Level, Point, StationCollection, UnitCollection, UnitIndicators } from "./types";
@@ -103,8 +104,10 @@ let shownView: PanelView | null = null;
 function showPanel(view: PanelView) {
   chart?.destroy();
   chart = null;
+  destroySeriesCharts();
   shownView = view;
-  renderPanel(panel, view, selection!, () => router.navigate(homeUrl(selection!)), (url) => router.navigate(url));
+  const series: SeriesFn = (id, pollutant, range) => api.stationSeries(id, pollutant, range);
+  renderPanel(panel, view, selection!, () => router.navigate(homeUrl(selection!)), (url) => router.navigate(url), series);
   fitMapToPanel();
   drawAsk();
 }

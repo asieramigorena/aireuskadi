@@ -1,6 +1,7 @@
 """/admin/...: the gateway passes the admin pages on to the auth service and gives back its answer."""
 
 import httpx
+import pytest
 
 
 def test_the_page_of_the_auth_service_comes_back_as_it_is(admin_client, auth):
@@ -53,9 +54,11 @@ def test_without_the_auth_service_there_is_no_admin_page(client):
     assert client.get("/admin").status_code == 404
 
 
-def test_a_path_with_dots_never_reaches_the_auth_service(admin_client, auth):
-    # The client would turn /admin/../me into /me: an inside route of the auth service.
-    answer = admin_client.get("/admin/%2e%2e/me")
+@pytest.mark.parametrize("path", ["/admin/%2e%2e/me", "/user/%2e/signup"])
+def test_a_path_with_dots_never_reaches_the_auth_service(admin_client, auth, path):
+    # The client would turn /admin/../me into /me, an inside route of the auth service, and
+    # /user/./signup into /user/signup, a sign-up that the limit of sign-ups did not count.
+    answer = admin_client.post(path, data={"username": "user1"})
 
     assert answer.status_code == 404
     assert auth.requests == []
@@ -103,3 +106,42 @@ def test_the_auth_service_learns_who_the_person_is_from_the_gateway_only(admin_c
     admin_client.get("/user", headers={"X-Forwarded-For": "203.0.113.7", "X-Person": "someone"})
 
     assert auth.requests[0].headers["x-person"] == "203.0.113.7"
+
+
+def pieces(body: bytes):
+    """A body sent in pieces (chunked), with no length said before: httpx does that with an iterator."""
+    yield from (body[i : i + 1000] for i in range(0, len(body), 1000))
+
+
+@pytest.mark.parametrize(
+    ("method", "body"),
+    [
+        ("POST", b"username=" + b"a" * 70_000),
+        ("GET", b"a" * 70_000),
+        ("POST", pieces(b"username=" + b"a" * 70_000)),
+    ],
+    ids=["a big form", "a get with a body", "a form in pieces"],
+)
+def test_a_body_too_big_for_a_form_never_reaches_the_auth_service(admin_client, auth, method, body):
+    # The gateway keeps the whole body in memory before passing it on: a few huge ones at the same
+    # time would fill it. No form of the accounts needs more than a few hundred bytes.
+    answer = admin_client.request(method, "/user/login", content=body)
+
+    assert answer.status_code == 413
+    assert auth.requests == []
+
+
+def test_a_small_form_sent_in_pieces_still_goes_on(admin_client, auth):
+    auth.respond(303, b"", headers={"location": "/"})
+
+    answer = admin_client.post(
+        "/user/login", content=pieces(b"username=user1&password=p"), follow_redirects=False
+    )
+
+    assert answer.status_code == 303
+    assert auth.requests[0].content == b"username=user1&password=p"
+
+
+def test_a_path_that_is_not_a_url_is_a_404_and_not_an_error(admin_client, auth):
+    assert admin_client.post("/user/signup%00").status_code == 404
+    assert auth.requests == []

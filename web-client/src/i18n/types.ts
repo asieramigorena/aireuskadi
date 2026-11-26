@@ -96,7 +96,22 @@ export interface Texts {
   noInventory: string;
   nfrParticlesNote: string;
 
-  // The questions to a language model about a unit (insight-service).
+  // The series of a pollutant at a station, in its block of the panel (series.ts).
+  seriesButton: string;
+  seriesPollutantLabel: string;
+  seriesPeriodLabel: string;
+  seriesPeriods: Record<"day" | "week" | "month", string>;
+  seriesGuideline: (period: "24h" | "8h", value: string) => string;
+  seriesNoGuideline: string;
+  seriesHourlyNote: string;
+  seriesDailyNote: string;
+  seriesEightHourDaily: string;
+  seriesWhoLabel: string;
+  seriesEmpty: string;
+  seriesValue: string;
+  seriesTime: string;
+  seriesTableCaption: (pollutant: string) => string;
+  // The questions to a language model (insight-service), in the box of a corner of the map (ask.ts).
   /** The line that opens the box of the questions, in its corner of the map. */
   askTitle: string;
   askChooseUnit: string;

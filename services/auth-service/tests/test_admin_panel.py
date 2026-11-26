@@ -4,6 +4,7 @@ the others. For anyone else the panel does not exist (404); without a session, t
 from datetime import UTC, datetime, timedelta
 
 import jwt
+import pytest
 from auth_service.session import COOKIE, create_access_token
 
 # The secret of the service in conftest.py. Not imported from it: there are several conftest.py
@@ -106,11 +107,10 @@ def test_a_deleted_or_demoted_account_loses_its_access_at_once(logged_in_as, fak
     assert client.get("/admin", follow_redirects=False).status_code == 303
 
 
-def test_a_bad_form_from_someone_who_is_not_an_admin_is_sent_to_the_login_first(admin_client):
+@pytest.mark.parametrize("form", [{"is_admin": "maybe"}, None])
+def test_a_bad_form_from_someone_who_is_not_an_admin_is_sent_to_the_login_first(admin_client, form):
     # The check of who it is comes before the check of the form: a 422 would say the route exists.
-    answer = admin_client.post(
-        "/admin/users/1/admin", data={"is_admin": "maybe"}, follow_redirects=False
-    )
+    answer = admin_client.post("/admin/users/1/admin", data=form, follow_redirects=False)
 
     assert (answer.status_code, answer.headers["location"]) == (303, "/user")
 
@@ -127,12 +127,6 @@ def test_the_change_is_refused_from_another_site(logged_in_as, fake_accounts):
 
     assert answer.status_code == 403
     assert fake_accounts.find(user2.id).is_admin is False
-
-
-def test_without_the_form_field_someone_who_is_not_an_admin_is_sent_to_the_login(admin_client):
-    answer = admin_client.post("/admin/users/1/admin", follow_redirects=False)
-
-    assert (answer.status_code, answer.headers["location"]) == (303, "/user")
 
 
 def test_an_account_deleted_at_the_same_moment_is_a_404_and_not_a_change(

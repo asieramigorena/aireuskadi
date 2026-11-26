@@ -132,6 +132,22 @@ def test_a_unit_question_sends_the_facts_of_the_year_and_keeps_the_answer(
     assert (station["recent"], station["readings"][0]["pollutant"]) == (True, "NO2")
 
 
+def test_only_the_text_and_the_model_reach_the_browser_and_the_cache(
+    ask, emissions, air_quality, insight, redis
+):
+    # Whatever else the insight service answered would be kept for everyone for days.
+    emissions.respond(body=json.dumps(CARD).encode())
+    air_quality.respond(body=json.dumps(STATIONS).encode())
+    insight.respond(body=json.dumps({**ANSWER, "key": KEY, "debug": "inside"}).encode())
+
+    answer = ask.get(UNIT)
+
+    assert answer.json() == ANSWER
+    assert redis.kept
+    for kept in redis.kept.values():
+        assert KEY not in str(kept) and "inside" not in str(kept)
+
+
 def test_a_new_hourly_value_does_not_make_a_new_key_but_a_new_ratio_does():
     later = {**READING, "ts": "2026-11-25T09:00:00Z", "value": 33}
     higher = {**READING, "who_ratio": 0.75}
@@ -314,6 +330,8 @@ def test_the_models_of_a_provider_need_a_session_and_go_with_the_key_only_in_a_h
     (request,) = insight.requests
     assert request.url.path == "/models"
     assert (request.headers["x-llm-provider"], request.headers["x-llm-key"]) == ("groq", KEY)
+    # Who asks: the insight service counts the lists of each account.
+    assert request.headers["x-account"] == "user1"
     ask.cookies.clear()
     assert ask.get("/api/v1/llm/models?provider=groq").status_code == 401
 

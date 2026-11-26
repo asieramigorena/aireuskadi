@@ -59,16 +59,29 @@ def test_the_parameters_of_a_route_travel_to_the_emissions_service(client, emiss
         "/units/01036",
         "/api/v2/units",
         "/",
+        # The routes of the air quality service.
+        "/api/v1/stations/",
+        "/api/v1/stations/7",
+        "/api/v1/stations/7/measurements/",
+        "/api/v1/stations/7/other",
+        "/api/v1/stations/latest/extra",
+        "/api/v1/units/48020/exposure/",
+        "/api/v1/units/48020/measurements",
+        "/api/v1/stations/..%2Fhealth/measurements",
+        "/stations",
+        "/units/48020/exposure",
+        "/api/v1/air-quality/stations",
     ],
 )
-def test_anything_that_is_not_in_the_list_is_a_404_and_never_reaches_the_service(
-    client, emissions, path
+def test_anything_that_is_not_in_the_list_is_a_404_and_never_reaches_a_service(
+    client, emissions, air_quality, path
 ):
     response = client.get(path, follow_redirects=False)
 
     assert response.status_code == 404
     assert response.headers["content-type"] == "application/problem+json"
     assert emissions.requests == []
+    assert air_quality.requests == []
 
 
 @pytest.mark.parametrize("method", ["post", "put", "patch", "delete"])

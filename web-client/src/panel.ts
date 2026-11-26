@@ -1,5 +1,6 @@
 // The panel of a unit. Everything that comes from the API (names of units and of pollutants, the
 // detail of an error) is written with `textContent`, never as HTML: it is free text.
+import { seriesSection, type SeriesFn } from "./series";
 import {
   airPollutantName,
   emissionName,
@@ -100,6 +101,7 @@ function stationBlock(
   open: boolean,
   chosen: boolean,
   names: ReadonlyMap<string, string>,
+  series?: { load: SeriesFn; pollutant: string },
 ): HTMLElement {
   const block = element("details");
   block.open = open || chosen;
@@ -145,10 +147,19 @@ function stationBlock(
   }
   table.append(body);
   block.append(table);
+  // How its values changed, with the WHO line, under the table (series.ts).
+  if (series) block.append(seriesSection(station, names, series.pollutant, series.load));
   return block;
 }
 
-function airQualitySection(air: UnitAirQuality | null, card: UnitCard, chosen: number | null): HTMLElement {
+type StationSeriesChoice = { load: SeriesFn; pollutant: string } | undefined;
+
+function airQualitySection(
+  air: UnitAirQuality | null,
+  card: UnitCard,
+  chosen: number | null,
+  series?: StationSeriesChoice,
+): HTMLElement {
   const section = element("section", undefined, "air-quality");
   section.append(element("h3", texts().airQuality));
   if (air === null) {
@@ -160,7 +171,7 @@ function airQualitySection(air: UnitAirQuality | null, card: UnitCard, chosen: n
   const names = new Map(card.emissions.map((emission) => [emission.pollutant, emissionName(emission.pollutant, emission.name)]));
   // One station is shown open; a list of them is closed so that the names can be read at once.
   for (const station of stations) {
-    section.append(stationBlock(station, stations.length === 1, station.id === chosen, names));
+    section.append(stationBlock(station, stations.length === 1, station.id === chosen, names, series));
   }
   if (air.measured) section.append(element("p", air.attribution, "source"));
   return section;
@@ -170,9 +181,9 @@ function airQualitySection(air: UnitAirQuality | null, card: UnitCard, chosen: n
  * service, and the name of the unit and its emissions are what the panel is for. Whatever is wrong
  * with it (a time that is not a time, a list that is not a list), the section says it is not
  * available. */
-function airQualityOf(card: UnitCard, chosen: number | null): HTMLElement {
+function airQualityOf(card: UnitCard, chosen: number | null, series?: StationSeriesChoice): HTMLElement {
   try {
-    return airQualitySection(card.air_quality, card, chosen);
+    return airQualitySection(card.air_quality, card, chosen, series);
   } catch {
     return airQualitySection(null, card, null);
   }
@@ -184,6 +195,8 @@ export function renderPanel(
   selection: Selection,
   onClose: () => void,
   navigate: (url: string) => void,
+  // The series of the stations (GET /stations/{id}/measurements); without it, no button to see them.
+  series?: SeriesFn,
 ): void {
   root.replaceChildren();
   root.hidden = view.status === "closed";
@@ -209,7 +222,7 @@ export function renderPanel(
       root.append(element("p", places.filter(Boolean).join(" · "), "meta"));
       // What the map shows comes first: the table of emissions or the stations.
       const emissions = emissionsTable(card, selection);
-      const airQuality = airQualityOf(card, view.station ?? null);
+      const airQuality = airQualityOf(card, view.station ?? null, series && { load: series, pollutant: selection.pollutant });
       root.append(...(selection.view === "air" ? [airQuality, emissions] : [emissions, airQuality]));
       // The panel can be short (a phone) and the list long: the station that was chosen is brought
       // to the top of the panel, under the header that stays there (scroll-padding-top).

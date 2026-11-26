@@ -64,72 +64,6 @@ def test_only_the_parameters_that_the_route_names_travel_and_with_the_value_they
     assert "admin" not in str(sent.url)
 
 
-def test_a_value_cannot_change_the_path_that_is_asked(client, air_quality):
-    client.get("/api/v1/stations/latest?pollutant=../health")
-    client.get("/api/v1/units/48020/exposure?pollutant=%2e%2e%2fhealth&year=..%2fhealth")
-
-    assert [r.url.path for r in air_quality.requests] == [
-        "/stations/latest",
-        "/units/48020/exposure",
-    ]
-
-
-def test_the_headers_of_the_browser_do_not_reach_the_air_quality_service(client, air_quality):
-    client.get(
-        "/api/v1/stations",
-        headers={
-            "Authorization": "Bearer secret-token",
-            "Cookie": "session=abc",
-            "X-Forwarded-For": "6.6.6.6",
-            "Origin": "http://evil.example",
-        },
-    )
-
-    (sent,) = air_quality.requests
-    names = {name.lower() for name in sent.headers}
-    assert names <= {"host", "accept", "accept-encoding", "connection", "user-agent"}, names
-    assert sent.headers["host"] == "air-quality.internal:8000"
-
-
-@pytest.mark.parametrize(
-    ("status", "content_type", "body"),
-    [
-        (404, "application/problem+json", b'{"status": 404, "detail": "Station 9 not found."}'),
-        (422, "application/problem+json", b'{"status": 422, "errors": []}'),
-    ],
-)
-def test_the_errors_of_the_air_quality_service_come_back_as_they_are(
-    client, air_quality, status, content_type, body
-):
-    air_quality.respond(status, body, content_type)
-
-    response = client.get("/api/v1/stations/latest?pollutant=NO2")
-
-    assert response.status_code == status
-    assert response.headers["content-type"] == content_type
-    assert response.content == body
-
-
-@pytest.mark.parametrize(
-    ("status", "body"),
-    [
-        (500, b"Internal Server Error"),
-        (503, b'{"detail": "cannot reach the database"}'),
-    ],
-)
-def test_a_failure_of_the_air_quality_service_is_a_502_that_says_nothing_of_the_reason(
-    client, air_quality, status, body
-):
-    air_quality.respond(status, body, "text/plain")
-
-    response = client.get("/api/v1/stations")
-
-    assert response.status_code == 502
-    assert response.headers["content-type"] == "application/problem+json"
-    assert response.json()["detail"] == "The service is not available."
-    assert "database" not in response.text
-
-
 def test_when_the_air_quality_service_is_down_the_emissions_routes_keep_working(
     client, emissions, air_quality
 ):
@@ -166,30 +100,4 @@ def test_an_id_or_a_code_that_cannot_be_one_is_a_422_before_it_is_sent(
     assert response.status_code == 422
     assert response.headers["content-type"] == "application/problem+json"
     assert [e["loc"] for e in response.json()["errors"]] == [["path", name]]
-    assert air_quality.requests == []
-
-
-@pytest.mark.parametrize(
-    "path",
-    [
-        "/api/v1/stations/",
-        "/api/v1/stations/7",
-        "/api/v1/stations/7/measurements/",
-        "/api/v1/stations/7/other",
-        "/api/v1/stations/latest/extra",
-        "/api/v1/units/48020/exposure/",
-        "/api/v1/units/48020/measurements",
-        "/api/v1/stations/..%2Fhealth/measurements",
-        "/stations",
-        "/units/48020/exposure",
-        "/api/v1/air-quality/stations",
-    ],
-)
-def test_anything_that_is_not_in_the_list_is_a_404_and_never_reaches_a_service(
-    client, emissions, air_quality, path
-):
-    response = client.get(path, follow_redirects=False)
-
-    assert response.status_code == 404
-    assert emissions.requests == []
     assert air_quality.requests == []

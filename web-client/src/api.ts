@@ -1,7 +1,8 @@
 // The calls to the gateway. It is the only place that knows the routes, and the only way out of the
 // page: a relative URL, so that every call goes to the site that served the page and never to
 // another one.
-import type { BoundaryCollection, Insight, Inventory, LlmChoice, Level, Point, PollutantName, StationCollection, UnitCard, UnitIndicators, UnitQuestion } from "./types";
+import type { SeriesRange } from "./series";
+import type { BoundaryCollection, Insight, Inventory, LlmChoice, StationSeries, Level, Point, PollutantName, StationCollection, UnitCard, UnitIndicators, UnitQuestion } from "./types";
 import type { Language } from "./i18n/types";
 import { errorText } from "./format";
 import { texts } from "./i18n";
@@ -94,6 +95,9 @@ export function createApi(fetchFn: typeof fetch = (...args) => fetch(...args)) {
         signal,
         { "X-LLM-Key": llm.key },
       ),
+    /** The series of a pollutant at a station in a range: by the hour, or the mean of each day. */
+    stationSeries: (id: number, pollutant: string, range: SeriesRange, signal?: AbortSignal) =>
+      get<StationSeries>(`/stations/${id}/measurements`, { pollutant, from: range.from, to: range.to, interval: range.interval }, signal),
     /** The models that the key can use at the provider, for the list of the panel. The key only in a
      * header, as in the questions. */
     models: async (provider: string, key: string, signal?: AbortSignal): Promise<string[]> => {

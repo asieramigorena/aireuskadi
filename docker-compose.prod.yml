@@ -1,7 +1,8 @@
 # Production stack, for the Oracle VM. It runs the images that deploy-pro.yml publishes in GitHub
 # Container Registry (tag :pro), never builds anything, and publishes NO port: nothing can reach
 # it from outside. The way in is an optional outbound tunnel that runs next to the gateway and talks
-# to http://api-gateway:8000 (the `tunnel` service at the end, only with the profile `tunnel`).
+# to http://api-gateway:8000: Tailscale Funnel (the `tunnel` service, only with the profile `tunnel`)
+# or Cloudflare (the `cloudflared` service, only with the profile `cloudflare`). Use one of them.
 #
 # On the VM, in this folder:
 #   cp .env.prod.example .env      # only what is not secret. The PASSWORDS are in the OCI Vault: the
@@ -11,7 +12,9 @@
 #                                  # can only read packages. Public packages need no login
 #   tunnel/serve.json              # needed only for the tunnel (it comes with the repository; chmod 644 it):
 #                                  # set COMPOSE_PROFILES=tunnel in .env to turn it on; the key TS_AUTHKEY
-#                                  # is the secret aireuskadi-tailscale-authkey of the Vault
+#                                  # is the secret aireuskadi-tailscale-authkey of the Vault. For Cloudflare:
+#                                  # COMPOSE_PROFILES=cloudflare, and the token is the secret
+#                                  # aireuskadi-cloudflare-token
 #   docker compose --env-file .env --env-file /run/aireuskadi/secrets.env -f docker-compose.prod.yml up -d
 #                                  # what the unit does; by hand, only after fetch-secrets.sh has run
 # Updates: every five minutes the timer deploy/aireuskadi-update.timer runs deploy/update.sh. When
@@ -34,6 +37,12 @@ x-logging: &logging
 x-application: &application
   restart: unless-stopped
   logging: *logging
+  # At most this much memory each, swap included: one application service that grows without end
+  # (a flood of big requests, a leak) is stopped and started again, instead of taking the memory
+  # that the database and the others need. The database and the monitoring have no limit.
+  # Security fix by Claude (audit 2026-11-26).
+  mem_limit: 1g
+  memswap_limit: 1g
 
 services:
   postgres:
@@ -224,7 +233,8 @@ services:
   # and needs the folder tunnel/ (serve.json) next to this file and TS_AUTHKEY (from the Vault) for the first start. If
   # the same tunnel still runs on the laptop, stop it first: two machines cannot share the name.
   tunnel:
-    image: tailscale/tailscale:v1.104.4
+    # By its digest too: the timer pulls the images again, and a tag can be published again.
+    image: tailscale/tailscale:v1.104.4@sha256:ed6480b33c6eb67c9cbd203ed42b9fb57e361986725b6856def71b7a3d9e276c
     profiles: [tunnel]
     hostname: aireuskadi
     environment:
@@ -246,6 +256,35 @@ services:
     tmpfs:
       - /tmp
       - /var/run/tailscale
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [edge]
+    restart: unless-stopped
+    logging: *logging
+
+  # The other way in: a tunnel of Cloudflare, for a domain of our own. Like the one of Tailscale it
+  # opens only an outbound connection and publishes no port. It starts only with
+  # COMPOSE_PROFILES=cloudflare in .env. The route (the domain -> http://api-gateway:8000) is set in
+  # the panel of Cloudflare; the token of the tunnel is the secret aireuskadi-cloudflare-token of the
+  # Vault (fetch-secrets.sh), and cloudflared reads it from TUNNEL_TOKEN, never from the command line.
+  # Turn the profile on only once that secret exists: without the token cloudflared stops at once and
+  # starts again and again.
+  cloudflared:
+    # By its digest: this container holds the token, and the timer pulls the images again.
+    image: cloudflare/cloudflared:2026.11.2@sha256:55c7e3e8d89d5e8d20b75a82f3602cbf98e06db406e73e282073cfdc5a9a3af6
+    profiles: [cloudflare]
+    command: [tunnel, --no-autoupdate, run]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+      # Its metrics only inside the container: by default they listen on every address, and the
+      # gateway, on the same network, could read them.
+      TUNNEL_METRICS: 127.0.0.1:20241
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    # The same as the tunnel of Tailscale: nothing written, no extra permissions, and only the
+    # network `edge`, so it can reach the gateway and nothing else.
+    read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     networks: [edge]

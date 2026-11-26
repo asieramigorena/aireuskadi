@@ -58,10 +58,3 @@ def test_a_path_that_tries_to_climb_finds_no_route_and_is_not_sent(client, emiss
     assert response.status_code == 404
     assert response.headers["content-type"] == "application/problem+json"
     assert emissions.requests == []
-
-
-@pytest.mark.parametrize("path", NO_ROUTE)
-def test_a_path_that_climbs_to_the_health_check_never_gets_there(client, emissions, path):
-    client.get(path)
-
-    assert all(request.url.path != "/health" for request in emissions.requests)
