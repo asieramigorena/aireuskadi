@@ -33,6 +33,7 @@ NOT_SENT = HOP_BY_HOP | {
     "x-forwarded-for",
     "x-real-ip",
     "forwarded",
+    "true-client-ip",
     # Who the person is, for the auth service: only the gateway says it (admin.py).
     "x-person",
 }
@@ -43,10 +44,11 @@ NOT_RETURNED = HOP_BY_HOP | {"content-length", "content-encoding", "date"}
 
 def headers_to_send(request: Request) -> dict:
     """The headers of the browser that can go on. None starting with x-webauth-: Grafana trusts
-    those, so only the gateway sets them."""
+    those, so only the gateway sets them. None starting with cf- either: Cloudflare writes there
+    the address and the country of the visitor, which the services behind do not need."""
     headers = {}
     for name, value in request.headers.items():
-        if name not in NOT_SENT and not name.startswith("x-webauth-"):
+        if name not in NOT_SENT and not name.startswith(("x-webauth-", "cf-")):
             headers[name] = value
     return headers
 

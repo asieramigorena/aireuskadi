@@ -46,6 +46,9 @@ def test_grafana_gets_our_user_and_nothing_the_browser_could_forge(admin_client,
             "X-WEBAUTH-USER": "intruder",
             "X-WEBAUTH-ROLE": "Admin",
             "X-Forwarded-For": "10.0.0.1",
+            "CF-Connecting-IP": "10.0.0.1",
+            "True-Client-IP": "10.0.0.1",
+            "CF-IPCountry": "XX",
         },
     )
 
@@ -57,7 +60,9 @@ def test_grafana_gets_our_user_and_nothing_the_browser_could_forge(admin_client,
     assert sent.content == b'{"queries": []}'
     assert sent.headers.get_list("x-webauth-user") == ["user1"]
     assert "x-webauth-role" not in sent.headers
-    assert "x-forwarded-for" not in sent.headers
+    # Who the visitor is and where from: the services behind never see it.
+    for name in ("x-forwarded-for", "cf-connecting-ip", "true-client-ip", "cf-ipcountry"):
+        assert name not in sent.headers
     # The cookies of Grafana go on; our JWT never leaves the gateway.
     assert sent.headers["cookie"] == "grafana_session=g1"
 

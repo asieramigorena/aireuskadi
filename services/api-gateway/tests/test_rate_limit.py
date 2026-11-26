@@ -1,6 +1,5 @@
-"""The limit of requests: so many per minute and per person. The person is the address that the
-tunnel says (X-Forwarded-For, which Tailscale writes itself) or, without the tunnel, the one of the
-connection."""
+"""The limit of requests: so many per minute and per person. The person is the last address of
+X-Forwarded-For, the one that the tunnel adds, or, without the tunnel, the one of the connection."""
 
 import pytest
 from api_gateway.main import create_app
@@ -74,3 +73,21 @@ def test_the_page_its_files_and_the_health_check_are_not_counted(limited):
         assert limited.get("/health", headers={"X-Forwarded-For": "203.0.113.7"}).status_code == 200
 
     assert ask(limited).status_code == 200
+
+
+def test_the_person_is_the_last_address_which_the_tunnel_adds_not_one_the_client_wrote(limited):
+    # Cloudflare adds the address of the client at the end of an X-Forwarded-For that the client can
+    # write itself: only the last one is true.
+    for made_up in ("10.0.0.1", "10.0.0.2", "10.0.0.3, 10.0.0.9"):
+        assert ask(limited, ip=f"{made_up}, 203.0.113.7").status_code == 200
+
+    assert ask(limited, ip="10.0.0.4, 203.0.113.7").status_code == 429
+
+
+def test_with_the_header_twice_the_person_is_the_last_address_of_the_last_one(limited):
+    for made_up in ("10.0.0.1", "10.0.0.2", "10.0.0.3"):
+        headers = [("X-Forwarded-For", made_up), ("X-Forwarded-For", "203.0.113.7")]
+        assert limited.get("/api/v1/pollutants", headers=headers).status_code == 200
+
+    headers = [("X-Forwarded-For", "10.0.0.4"), ("X-Forwarded-For", "203.0.113.7")]
+    assert limited.get("/api/v1/pollutants", headers=headers).status_code == 429

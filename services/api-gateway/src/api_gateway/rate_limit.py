@@ -1,11 +1,12 @@
 """The limit of requests of the API and of the pages of the accounts: so many per window of time
 (a minute by default) and per person, kept in memory.
 
-The person is the address of the header X-Forwarded-For, which the tunnel (Tailscale Funnel) writes
-itself with the address of the client: it replaces whatever the client sent. Without the tunnel (on
-this machine) it is the address of the connection. In production only the tunnel reaches the
-gateway, so nobody else can choose that header. The counts are kept in memory, only for the minute
-that is going on: a restart forgets them, which is enough for one gateway.
+The person is the LAST address of the header X-Forwarded-For. Cloudflare adds the address of the
+client at the end of that header, after whatever the client wrote in it, and Tailscale Funnel
+replaces the header with it: either way only the last one is true. Without a tunnel (on this machine) it is the address of the
+connection. In production only the tunnel reaches the gateway, so nobody else can add to that
+header. The counts are kept in memory, only for the window that is going on: a restart forgets them,
+which is enough for one gateway.
 """
 
 import time
@@ -45,8 +46,11 @@ class RateLimit:
 
 
 def person_of(request: Request) -> str:
-    """The address of the client: the one that the tunnel says, or the one of the connection."""
-    return request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")
+    """The address of the client: the last one of X-Forwarded-For, or the one of the connection.
+    The header can come more than once; it is read as one list, like the tunnel reads it."""
+    forwarded = ",".join(request.headers.getlist("x-forwarded-for"))
+    last = forwarded.split(",")[-1].strip()
+    return last or (request.client.host if request.client else "")
 
 
 def install_rate_limit(app: FastAPI, rate_limit: RateLimit) -> None:

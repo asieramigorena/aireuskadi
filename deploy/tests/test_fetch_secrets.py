@@ -22,6 +22,8 @@ AUTH = "Auth-Password_0123456789abcdefghij"
 JWT = "Jwt-Secret_0123456789abcdefghijklmnopqrstuvwxyz"
 # The shape of a one-time key of Tailscale: letters, digits and "-".
 TAILSCALE = "tskey-auth-kAbC123CNTRL-0123456789abcdefghijklmnopqrstuvwxyz"
+# The shape of the token of a tunnel of Cloudflare: base64, with "+", "/" and "=".
+CLOUDFLARE = "eyJhIjoiMDEyMzQ1Njc4OWFiY2RlZiIsInQiOiJhYmMrZGVmL2doaSJ9+/0123456789=="
 
 FAKE_DOCKER = r"""#!/usr/bin/env bash
 # Answers like `docker run ... oci secrets secret-bundle get-secret-bundle-by-name ...`.
@@ -152,6 +154,7 @@ def test_the_vault_is_asked_with_the_identity_of_the_machine_and_by_the_name_of_
         "aireuskadi-auth-password",
         "aireuskadi-jwt-secret",
         "aireuskadi-tailscale-authkey",
+        "aireuskadi-cloudflare-token",
     ]
     assert len(calls) == len(names)
     for call, name in zip(calls, names, strict=True):
@@ -314,3 +317,27 @@ def test_the_secret_of_the_jwt_is_required_like_the_passwords(machine):
 
     assert result.returncode != 0
     assert not machine["out"].exists()
+
+
+def test_the_token_of_cloudflare_is_written_with_its_base64_characters(machine):
+    # The token is base64 and does not go inside a URL: "+", "/" and "=" are allowed for it only.
+    (machine["secrets"] / "aireuskadi-cloudflare-token").write_text(CLOUDFLARE)
+
+    result = run(machine)
+
+    assert result.returncode == 0, result.stderr
+    assert written(machine)["CLOUDFLARE_TUNNEL_TOKEN"] == CLOUDFLARE
+    assert CLOUDFLARE not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("bad", ["token\nPOSTGRES_PASSWORD=other", "token with space", "to$ken"])
+def test_a_token_of_cloudflare_that_could_add_lines_or_commands_to_the_file_is_refused(
+    machine, bad
+):
+    (machine["secrets"] / "aireuskadi-cloudflare-token").write_text(bad)
+
+    result = run(machine)
+
+    assert result.returncode != 0
+    assert not machine["out"].exists()
+    assert "other" not in result.stdout + result.stderr
