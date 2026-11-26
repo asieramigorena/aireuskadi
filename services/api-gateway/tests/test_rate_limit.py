@@ -91,3 +91,43 @@ def test_with_the_header_twice_the_person_is_the_last_address_of_the_last_one(li
 
     headers = [("X-Forwarded-For", "10.0.0.4"), ("X-Forwarded-For", "203.0.113.7")]
     assert limited.get("/api/v1/pollutants", headers=headers).status_code == 429
+
+
+def test_the_addresses_ipv6_of_one_network_64_are_one_person(limited):
+    # Whoever has one IPv6 network has millions of addresses: each one would be a new person.
+    for address in ("2001:db8:1:2::1", "2001:db8:1:2::2", "2001:db8:1:2:ffff::9"):
+        assert ask(limited, ip=address).status_code == 200
+
+    assert ask(limited, ip="2001:db8:1:2::abcd").status_code == 429
+    assert ask(limited, ip="2001:db8:1:3::1").status_code == 200
+
+
+@pytest.mark.parametrize("path", ["/user", "/admin"])
+def test_the_pages_of_the_accounts_count_in_the_limit(limited, path):
+    # Each of them asks the auth service, which reads the database: a script must not ask freely.
+    for _ in range(3):
+        limited.get(path, headers={"X-Forwarded-For": "203.0.113.7"})
+
+    assert ask(limited).status_code == 429
+
+
+def test_grafana_has_a_limit_of_its_own_five_times_bigger(limited):
+    # A dashboard asks for dozens of files and one query per panel: the limit of the API would stop
+    # an admin. It is counted all the same: each request asks the auth service who the cookie is.
+    grafana = [
+        limited.get("/grafana/", headers={"X-Forwarded-For": "203.0.113.7"}).status_code
+        for _ in range(16)
+    ]
+
+    assert 429 not in grafana[:15]
+    assert grafana[15] == 429
+    assert ask(limited).status_code == 200
+
+
+def test_an_address_ipv4_written_as_ipv6_is_still_its_own_person(limited):
+    # ::ffff:203.0.113.7 is the IPv4 203.0.113.7: all of them are not one network /64.
+    for _ in range(3):
+        ask(limited, ip="::ffff:203.0.113.7")
+
+    assert ask(limited, ip="::ffff:203.0.113.7").status_code == 429
+    assert ask(limited, ip="::ffff:203.0.113.8").status_code == 200

@@ -37,6 +37,12 @@ x-logging: &logging
 x-application: &application
   restart: unless-stopped
   logging: *logging
+  # At most this much memory each, swap included: one application service that grows without end
+  # (a flood of big requests, a leak) is stopped and started again, instead of taking the memory
+  # that the database and the others need. The database and the monitoring have no limit.
+  # Security fix by Claude (audit 2026-11-26).
+  mem_limit: 1g
+  memswap_limit: 1g
 
 services:
   postgres:

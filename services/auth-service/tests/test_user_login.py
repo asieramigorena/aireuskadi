@@ -3,6 +3,8 @@
 The accounts are a fake (FakeAccounts in conftest.py): these tests run without a database.
 """
 
+import pytest
+
 PASSWORD = "a-long-password-1"
 
 
@@ -57,7 +59,10 @@ def test_logout_deletes_the_cookie(admin_client):
 
     assert answer.status_code == 303
     assert answer.headers["location"] == "/user"
-    assert "max-age=0" in answer.headers["set-cookie"].lower()
+    cookie = answer.headers["set-cookie"].lower()
+    assert "max-age=0" in cookie
+    # Deleted with the same flags it was set with: a browser could keep one set without them.
+    assert "secure" in cookie and "samesite=strict" in cookie and "httponly" in cookie
 
 
 def test_the_login_page_is_a_form_that_is_never_cached(admin_client):
@@ -139,16 +144,10 @@ def test_someone_logged_in_sees_their_account_and_not_the_login_form(logged_in_a
 
     assert "user2" in page
     assert 'action="/user/login"' not in page
-    assert 'action="/user/logout"' in page
-
-
-def test_an_account_that_is_not_an_admin_sees_only_the_map_and_out(logged_in_as):
-    page = logged_in_as("user2", is_admin=False).get("/user").text
-
-    assert ">Map</a>" in page
+    # Not an admin: only the map and the way out, never Grafana or the panel.
+    assert ">Map</a>" in page and 'action="/user/logout"' in page
     assert "/grafana/" not in page
     assert 'href="/admin"' not in page
-    assert 'action="/user/logout"' in page
 
 
 # The language: English unless the browser asks for Basque or Spanish, or ?lang= chooses it.
@@ -219,9 +218,11 @@ def test_too_many_failures_is_the_login_page_with_the_reason_in_its_language(
     assert '<form method="post"' in answer.text
 
 
-def test_a_form_sent_from_another_site_is_refused(admin_client, fake_accounts):
+@pytest.mark.parametrize("site", ["cross-site", "same-site"])
+def test_a_form_sent_from_another_site_is_refused(admin_client, fake_accounts, site):
+    # same-site is another name under the same domain (anything.aireuskadi.eus): not this site.
     fake_accounts.add("user1", PASSWORD)
-    from_elsewhere = {"Sec-Fetch-Site": "cross-site"}
+    from_elsewhere = {"Sec-Fetch-Site": site}
 
     login = admin_client.post(
         "/user/login",
@@ -235,12 +236,14 @@ def test_a_form_sent_from_another_site_is_refused(admin_client, fake_accounts):
     assert logout.status_code == 403 and "set-cookie" not in logout.headers
 
 
-def test_after_the_logout_the_old_token_is_worth_nothing(admin_client, fake_accounts):
+@pytest.mark.parametrize("written", ["as it was", "with a = at the end"])
+def test_after_the_logout_the_old_token_is_worth_nothing(admin_client, fake_accounts, written):
+    # The JWT library also accepts the token with a "=" at the end: it is the same token.
     fake_accounts.add("user1", PASSWORD)
     token = log_in(admin_client, "user1", PASSWORD).cookies["aireuskadi_session"]
 
     admin_client.post("/user/logout")
-    admin_client.cookies.set("aireuskadi_session", token)
+    admin_client.cookies.set("aireuskadi_session", token if written == "as it was" else token + "=")
 
     assert admin_client.get("/me").status_code == 401
 
@@ -265,19 +268,6 @@ def test_a_logout_with_a_token_that_is_not_ours_keeps_nothing_in_memory(admin_cl
     admin_client.post("/user/logout")
 
     assert admin_client.app.state.logged_out == set()
-
-
-def test_after_the_logout_the_same_token_written_another_way_is_worth_nothing(
-    admin_client, fake_accounts
-):
-    # The JWT library also accepts the token with a "=" at the end: it is the same token.
-    fake_accounts.add("user1", PASSWORD)
-    token = log_in(admin_client, "user1", PASSWORD).cookies["aireuskadi_session"]
-
-    admin_client.post("/user/logout")
-    admin_client.cookies.set("aireuskadi_session", token + "=")
-
-    assert admin_client.get("/me").status_code == 401
 
 
 def test_the_pages_have_the_icon_of_the_map_in_the_tab(admin_client):

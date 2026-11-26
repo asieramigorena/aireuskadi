@@ -14,7 +14,7 @@ members = ["packages/*", "services/*"]
 exclude = ["services/air-quality-service"]
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "ruff>=0.6", "pyyaml>=6"]
 
 # Every run of pytest, also of one folder, starts from the root of the repository and loads the plugin
 # that points the tests to a database of their own (packages/db/tests/testing.py). Without

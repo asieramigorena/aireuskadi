@@ -26,6 +26,7 @@ UNIT_SECONDS = 7 * 24 * 3600
 GENERAL_SECONDS = 30 * 24 * 3600
 NOT_AVAILABLE = "The text is not available right now."
 TOO_MANY = "Too many questions right now."
+TOO_MANY_LISTS = "Too many requests for the list of models right now."
 TOPIC = r"^(who_ratio|density|pollutant:[A-Z0-9_]{1,20})$"
 
 Language = Literal["eu", "es", "en"]
@@ -220,9 +221,11 @@ async def general_insight(
 async def llm_models(request: Request, provider: Provider, x_llm_key: LlmKey):
     """The models that the key of the person can use at the provider, for the list of the panel.
     Not kept: the list depends on the key."""
-    if await session_name(request) is None:
+    account = await session_name(request)
+    if account is None:
         return problem(HTTPStatus.UNAUTHORIZED, NOT_LOGGED_IN)
-    headers = {"X-LLM-Provider": provider, "X-LLM-Key": x_llm_key}
+    # The account too: the insight service counts the lists of each one.
+    headers = {"X-LLM-Provider": provider, "X-LLM-Key": x_llm_key, "X-Account": account}
     try:
         answer = await request.app.state.insight.get("/models", headers=headers)
     except httpx.HTTPError:
@@ -230,7 +233,7 @@ async def llm_models(request: Request, provider: Provider, x_llm_key: LlmKey):
     if answer.status_code == 403:
         return problem(HTTPStatus.FORBIDDEN, KEY_REFUSED)
     if answer.status_code == 429:
-        return problem(HTTPStatus.TOO_MANY_REQUESTS, TOO_MANY)
+        return problem(HTTPStatus.TOO_MANY_REQUESTS, TOO_MANY_LISTS)
     try:
         names = answer.json()["models"] if answer.status_code == 200 else None
     except (ValueError, KeyError, TypeError):

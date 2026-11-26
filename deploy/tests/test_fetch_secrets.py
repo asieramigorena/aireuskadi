@@ -288,8 +288,9 @@ def test_without_the_key_of_the_tunnel_the_rest_is_written_and_it_is_said_that_t
     assert "aireuskadi-tailscale-authkey" in result.stderr
 
 
-def test_a_password_that_is_missing_is_not_skipped_like_the_key_of_the_tunnel(machine):
-    (machine["secrets"] / "aireuskadi-reader-password").unlink()
+@pytest.mark.parametrize("name", ["aireuskadi-reader-password", "aireuskadi-jwt-secret"])
+def test_a_password_that_is_missing_is_not_skipped_like_the_key_of_the_tunnel(machine, name):
+    (machine["secrets"] / name).unlink()
 
     result = run(machine)
 
@@ -297,26 +298,20 @@ def test_a_password_that_is_missing_is_not_skipped_like_the_key_of_the_tunnel(ma
     assert not machine["out"].exists()
 
 
+@pytest.mark.parametrize("name", ["aireuskadi-tailscale-authkey", "aireuskadi-cloudflare-token"])
 @pytest.mark.parametrize(
     "bad", ["key\nPOSTGRES_PASSWORD=other", "key with space", "key;rm", "ke$y"]
 )
-def test_a_key_of_the_tunnel_that_could_add_lines_or_commands_to_the_file_is_refused(machine, bad):
-    (machine["secrets"] / "aireuskadi-tailscale-authkey").write_text(bad)
+def test_a_key_of_a_tunnel_that_could_add_lines_or_commands_to_the_file_is_refused(
+    machine, name, bad
+):
+    (machine["secrets"] / name).write_text(bad)
 
     result = run(machine)
 
     assert result.returncode != 0
     assert not machine["out"].exists()
-    assert "other" not in result.stderr
-
-
-def test_the_secret_of_the_jwt_is_required_like_the_passwords(machine):
-    (machine["secrets"] / "aireuskadi-jwt-secret").unlink()
-
-    result = run(machine)
-
-    assert result.returncode != 0
-    assert not machine["out"].exists()
+    assert "other" not in result.stdout + result.stderr
 
 
 def test_the_token_of_cloudflare_is_written_with_its_base64_characters(machine):
@@ -328,16 +323,3 @@ def test_the_token_of_cloudflare_is_written_with_its_base64_characters(machine):
     assert result.returncode == 0, result.stderr
     assert written(machine)["CLOUDFLARE_TUNNEL_TOKEN"] == CLOUDFLARE
     assert CLOUDFLARE not in result.stdout + result.stderr
-
-
-@pytest.mark.parametrize("bad", ["token\nPOSTGRES_PASSWORD=other", "token with space", "to$ken"])
-def test_a_token_of_cloudflare_that_could_add_lines_or_commands_to_the_file_is_refused(
-    machine, bad
-):
-    (machine["secrets"] / "aireuskadi-cloudflare-token").write_text(bad)
-
-    result = run(machine)
-
-    assert result.returncode != 0
-    assert not machine["out"].exists()
-    assert "other" not in result.stdout + result.stderr

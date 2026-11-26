@@ -34,7 +34,8 @@ def test_every_refused_sign_up_is_the_same_answer(admin_client, fake_accounts):
 
     refused = [
         sign_up(admin_client, "user1", PASSWORD),  # taken
-        sign_up(admin_client, "grafanaadmin", PASSWORD),  # the admin of Grafana
+        # the admin of Grafana, written with capitals and spaces
+        sign_up(admin_client, " GrafanaAdmin ", PASSWORD),
         sign_up(admin_client, "user2", "abcd"),  # a short password
         sign_up(admin_client, "user3", PASSWORD, again="another-password-1"),  # typed twice wrong
         sign_up(admin_client, "a b", PASSWORD),  # a bad name

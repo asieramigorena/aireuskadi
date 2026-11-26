@@ -3,7 +3,8 @@ of the fixed list and the facts of a unit (or none). It answers the text of the 
 
 The person brings the provider, the model and their own key, which the gateway passes in headers:
 the key is used for this call and never kept or logged. Each account can ask `per_hour` questions an
-hour, well or not, so nobody uses the site as a free relay."""
+hour, well or not, so nobody uses the site as a free relay, and as many lists of models (a list says
+whether a key works, so without a limit it would be a way to try stolen keys)."""
 
 import logging
 import time
@@ -55,9 +56,18 @@ def create_app(llm: Llm, *, per_hour: int = 30, clock=time.monotonic) -> FastAPI
     )
     install_problem_documents(app)
     install_request_log(app, "insight_service.access", quiet_paths=(HEALTH_PATH,))
-    # How many questions each account asked in the hour that is going on, like the limit of the
-    # gateway (rate_limit.py): a new hour starts every count again.
+    # How many questions and lists each account asked in the hour that is going on, like the limit
+    # of the gateway (rate_limit.py): a new hour starts every count again.
     counts = {"hour": None, "asked": {}}
+
+    def allowed(what: str, account: str) -> bool:
+        """Counts one `what` ("question" or "models") of `account`; False past `per_hour`."""
+        hour = int(clock() // 3600)
+        if hour != counts["hour"]:
+            counts["hour"], counts["asked"] = hour, {}
+        asked = counts["asked"]
+        asked[(what, account)] = asked.get((what, account), 0) + 1
+        return asked[(what, account)] <= per_hour
 
     @app.post("/insight")
     async def insight(
@@ -67,13 +77,8 @@ def create_app(llm: Llm, *, per_hour: int = 30, clock=time.monotonic) -> FastAPI
         x_llm_key: Annotated[str, Header(pattern=r"^[!-~]{1,400}$")],
         x_account: Annotated[str, Header(max_length=64)],
     ):
-        hour = int(clock() // 3600)
-        if hour != counts["hour"]:
-            counts["hour"], counts["asked"] = hour, {}
-        asked = counts["asked"]
-        if asked.get(x_account, 0) >= per_hour:
+        if not allowed("question", x_account):
             return problem(HTTPStatus.TOO_MANY_REQUESTS, TOO_MANY)
-        asked[x_account] = asked.get(x_account, 0) + 1
 
         start = time.monotonic()
         rules = system_prompt(question.question, question.lang)
@@ -104,9 +109,13 @@ def create_app(llm: Llm, *, per_hour: int = 30, clock=time.monotonic) -> FastAPI
     async def models(
         x_llm_provider: Annotated[Provider, Header()],
         x_llm_key: Annotated[str, Header(pattern=r"^[!-~]{1,400}$")],
+        x_account: Annotated[str, Header(max_length=64)],
     ):
         """The models that the key of the person can use at the provider: the list of the panel,
         so that nobody asks a model that does not exist."""
+        # Security fix by Claude (audit 2026-11-26).
+        if not allowed("models", x_account):
+            return problem(HTTPStatus.TOO_MANY_REQUESTS, TOO_MANY)
         try:
             return {"models": await llm.models(x_llm_provider, x_llm_key)}
         except LlmUnavailable as error:

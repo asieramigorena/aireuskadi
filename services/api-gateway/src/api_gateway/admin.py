@@ -18,6 +18,9 @@ router = APIRouter(include_in_schema=False)
 
 # The cookie with the JWT, set by the auth service at the login.
 COOKIE = "aireuskadi_session"
+# The biggest body of a request to the accounts: their forms are a few hundred bytes. The body is
+# kept in memory before it is passed on, and anyone can send one, so a bigger one is refused.
+MAX_FORM_BYTES = 64 * 1024
 
 
 def our_cookie(request: Request) -> dict:
@@ -26,6 +29,19 @@ def our_cookie(request: Request) -> dict:
     if value is None:
         return {}
     return {"cookie": f"{COOKIE}={value}"}
+
+
+# Security fix by Claude (audit 2026-11-26).
+async def small_body(request: Request) -> bytes | None:
+    """The body of the request, or None if it is bigger than MAX_FORM_BYTES. It is read in pieces
+    and left as soon as it passes the limit: whatever its method, and whether its length was said
+    before or not (a body sent in pieces does not say it)."""
+    body = b""
+    async for piece in request.stream():
+        body += piece
+        if len(body) > MAX_FORM_BYTES:
+            return None
+    return body
 
 
 async def session_name(request: Request) -> str | None:
@@ -52,6 +68,9 @@ async def session_name(request: Request) -> str | None:
 @router.api_route("/admin", methods=["GET", "POST"])
 @router.api_route("/admin/{path:path}", methods=["GET", "POST"])
 async def accounts(request: Request):
+    body = await small_body(request)
+    if body is None:
+        return problem(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "The form is too big.")
     # A few sign-ups per person and hour: a script must not make accounts by the thousand, nor try
     # names to learn which exist.
     signing_up = request.method == "POST" and request.url.path == "/user/signup"
@@ -62,4 +81,4 @@ async def accounts(request: Request):
     # Who the person is (the address that the tunnel says): the auth service counts the failed
     # logins per person and name, so that nobody can lock someone else's account.
     headers["x-person"] = person_of(request)
-    return await relay(request.app.state.auth, request, headers)
+    return await relay(request.app.state.auth, request, headers, body)

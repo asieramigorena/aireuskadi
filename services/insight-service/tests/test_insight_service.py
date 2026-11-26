@@ -69,7 +69,8 @@ def headers(provider="groq", model="m", key=KEY, account="user1"):
     }
 
 
-def test_the_question_goes_to_the_provider_with_the_key_the_language_and_the_facts(model):
+def test_the_question_goes_to_the_provider_with_the_key_the_language_and_the_facts(model, caplog):
+    caplog.set_level("DEBUG")
     response = client_for(model).post("/insight", json=ASK, headers=headers("mistral"))
 
     assert response.status_code == 200
@@ -81,6 +82,8 @@ def test_the_question_goes_to_the_provider_with_the_key_the_language_and_the_fac
     assert body["model"] == "m"
     assert "Spanish" in body["messages"][0]["content"]
     assert json.loads(body["messages"][1]["content"]) == {"name": "Bilbao"}
+    # The key went to the provider and nowhere else: not even the log of a question that went well.
+    assert KEY not in caplog.text
 
 
 @pytest.mark.parametrize("case", ["500", "timeout", "no choices", "empty text"])
@@ -200,3 +203,18 @@ def test_when_the_provider_does_not_give_its_models_it_says_why(model, status, o
 
     assert response.status_code == ours
     assert KEY not in response.text
+
+
+def test_each_account_can_ask_for_the_models_so_many_times_an_hour(model):
+    # The list answers whether a key works: without a limit, a way to try stolen keys.
+    model.answer = httpx.Response(200, json={"object": "list", "data": [{"id": "a-model"}]})
+    client = client_for(model, per_hour=2)
+
+    statuses = [client.get("/models", headers=headers()).status_code for _ in range(3)]
+    other = client.get("/models", headers=headers(account="user2")).status_code
+    model.answer = httpx.Response(200, json=completion("Hola"))
+    question = client.post("/insight", json=ASK, headers=headers()).status_code
+
+    assert statuses == [200, 200, 429]
+    # Another account, and the questions of the same account, are counted apart.
+    assert (other, question) == (200, 200)
