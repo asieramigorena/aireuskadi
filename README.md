@@ -16,7 +16,7 @@ The unit of the map is the municipality (INE code). Districts and the three hist
 add up their municipalities. The page is in Basque, Spanish and English: it follows the language of
 the browser, and `?lang=eu|es|en` chooses one.
 
-It is published at <https://aireuskadi.taila95ab4.ts.net>.
+It is published at <https://aireuskadi.eus>.
 
 ## Run it locally
 
