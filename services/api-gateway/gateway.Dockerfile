@@ -7,7 +7,9 @@
 # of the repository as context, which is what this one needs.
 
 # Stage 1: compile the web page (tsc checks the types, Vite makes web-client/dist).
-FROM node:22-slim AS web
+# The base image by its digest: a tag can be published again.
+# Security fix by Claude (audit 2026-11-26).
+FROM node:22-slim@sha256:be979e5523c76fa4d5ca4ebd3099078f220aa47ec39c48ad5b5df9314debd6eb AS web
 WORKDIR /web
 COPY web-client/package.json web-client/package-lock.json ./
 RUN npm ci
@@ -15,9 +17,12 @@ COPY web-client/ ./
 RUN npm run build
 
 # Stage 2: the gateway, which serves that page and the API. Node is not in this image.
-FROM python:3.12-slim
+# The base image by its digest: a tag can be published again.
+# Security fix by Claude (audit 2026-11-26).
+FROM python:3.12-slim@sha256:191083cdf6c7bda8c76158983163ead5d5cf7b77cf3033e805bb0f5296f51b4b
 
-COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /usr/local/bin/uv
+# uv by its digest too: it goes into every image. Security fix by Claude (audit 2026-11-26).
+COPY --from=ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 /uv /usr/local/bin/uv
 
 ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \

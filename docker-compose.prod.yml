@@ -39,14 +39,27 @@ x-application: &application
   logging: *logging
   # At most this much memory each, swap included: one application service that grows without end
   # (a flood of big requests, a leak) is stopped and started again, instead of taking the memory
-  # that the database and the others need. The database and the monitoring have no limit.
+  # that the database and the others need. The database and the monitoring have limits of their own.
   # Security fix by Claude (audit 2026-11-26).
   mem_limit: 1g
   memswap_limit: 1g
 
+# Our services write no file: their filesystem is read-only (/tmp aside, in memory), they have no
+# extra permission of Linux and cannot gain one. If one is broken into, it cannot change its own code
+# or do what root could. Security fix by Claude (audit 2026-11-26).
+x-locked: &locked
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
 services:
   postgres:
     image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-database:${IMAGE_TAG:-pro}
+    # At most this much memory, swap included. Security fix by Claude (audit 2026-11-26).
+    mem_limit: 2g
+    memswap_limit: 2g
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?set it in .env}
       POSTGRES_USER: ${POSTGRES_USER:?set it in .env}
@@ -65,6 +78,7 @@ services:
   # role of the auth service if they are missing (or changes their passwords if they changed). The
   # services that read wait for it.
   db-init:
+    <<: *locked
     image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-ingestion-worker:${IMAGE_TAG:-pro}
     entrypoint: ["aireuskadi-db-init"]
     environment:
@@ -80,7 +94,7 @@ services:
     logging: *logging
 
   emissions-service:
-    <<: *application
+    <<: [*application, *locked]
     image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-emissions-service:${IMAGE_TAG:-pro}
     environment:
       # This service only reads: it connects with the read-only role, never with the owner.
@@ -101,7 +115,7 @@ services:
 
   # Air quality API. It only reads, like the emissions service, and the gateway reaches it by name.
   air-quality-service:
-    <<: *application
+    <<: [*application, *locked]
     image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-air-quality-service:${IMAGE_TAG:-pro}
     environment:
       # The read-only role, and the scheme of Node (postgresql://), not the one of SQLAlchemy.
@@ -123,13 +137,16 @@ services:
   # The accounts: login with JWT, the admin pages, and /me, which the gateway asks before it opens
   # Grafana. The only service that reads the accounts and the only one that knows JWT_SECRET.
   auth-service:
-    <<: *application
+    <<: [*application, *locked]
     image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-auth-service:${IMAGE_TAG:-pro}
     environment:
       AUTH_DATABASE_URL: postgresql+psycopg://${POSTGRES_AUTH_USER}:${POSTGRES_AUTH_PASSWORD}@postgres:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET:?it comes from the Vault (see deploy/fetch-secrets.sh)}
       # Nobody can sign up with the name of the full admin of Grafana: the owner makes that one.
       GRAFANA_ADMIN_USER: ${GRAFANA_ADMIN_USER:?set it in .env (the account that is the full admin of Grafana)}
+      # The logouts, kept across a restart (auth_service/logouts.py).
+      # Security fix by Claude (audit 2026-11-26).
+      REDIS_URL: redis://logouts:6379/0
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -143,12 +160,14 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    # `logouts` for its own Redis. Security fix by Claude (audit 2026-11-26).
+    networks: [default, logouts]
 
   # The questions to a language model (any API with the chat completions of OpenAI). Each person
   # logs in and types their own key in the panel: it comes with each question and is never kept.
   # No database, no published port; only the gateway reaches it, and it calls the API on the Internet.
   insight-service:
-    <<: *application
+    <<: [*application, *locked]
     image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-insight-service:${IMAGE_TAG:-pro}
     # Its own network, with the gateway only: no other container can ask it (it checks no session). It is not
     # `internal`, because the model is on the Internet.
@@ -164,12 +183,29 @@ services:
       retries: 3
       start_period: 15s
 
+  # The logouts of the auth service (auth_service/logouts.py), apart from the cache: the auth
+  # service cannot touch what everybody is served, and a full cache cannot push a logout out. Full,
+  # it refuses a new logout instead (the auth service then keeps it in memory). No disk: a restart
+  # forgets the logouts of the last 8 hours. Its own network, with the auth service only.
+  # Security fix by Claude (audit 2026-11-26).
+  logouts:
+    <<: *application
+    image: redis:7.4.12-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "16mb", "--maxmemory-policy", "noeviction"]
+    networks: [logouts]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   # The cache of the gateway: the answers of the services for a while, and the texts of the language
   # model for days. No persistence (a restart only loses what is generated again), 64 MB at most,
   # on its own network with the gateway only, no published port.
   redis:
     <<: *application
-    image: redis:7-alpine
+    # Pinned by digest: the timer pulls the images again. Security fix by Claude (audit 2026-11-26).
+    image: redis:7.4.12-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
     command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
     networks: [cache]
     healthcheck:
@@ -180,7 +216,7 @@ services:
 
   # The only way in: the page and the API. No port is published: the tunnel reaches it by name.
   api-gateway:
-    <<: *application
+    <<: [*application, *locked]
     image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-api-gateway:${IMAGE_TAG:-pro}
     environment:
       EMISSIONS_URL: http://emissions-service:8000
@@ -190,9 +226,20 @@ services:
       # Not in depends_on: without it the gateway still answers, and the questions say so.
       INSIGHT_URL: http://insight-service:8000
       REDIS_URL: redis://redis:6379/0
+      # X-Forwarded-For is believed only from the network of the tunnels.
+      # Security fix by Claude (audit 2026-11-26).
+      TUNNEL_NETWORK: 10.89.1.0/24
     # It also joins `edge`, the only network the tunnel is on, `cache`, the only one Redis is on,
     # `insight`, the only one the insight service is on, and `monitoring`, the only one Grafana is on.
-    networks: [default, edge, cache, insight, monitoring]
+    # A fixed address on `monitoring`: the only one that Grafana believes.
+    # Security fix by Claude (audit 2026-11-26).
+    networks:
+      default:
+      edge:
+      cache:
+      insight:
+      monitoring:
+        ipv4_address: 10.89.2.10
     depends_on:
       # Started, not healthy: without Redis the gateway still answers.
       redis:
@@ -217,7 +264,7 @@ services:
   # The only writer of the database: it runs the loads when they are due (measurements every hour,
   # the boundaries and the E-PRTR register every month) and remembers nothing but ingestion_run.
   ingestion-scheduler:
-    <<: *application
+    <<: [*application, *locked]
     image: ghcr.io/${GHCR_OWNER:-asieramigorena}/aireuskadi-ingestion-worker:${IMAGE_TAG:-pro}
     command: ["schedule"]
     environment:
@@ -235,6 +282,9 @@ services:
   tunnel:
     # By its digest too: the timer pulls the images again, and a tag can be published again.
     image: tailscale/tailscale:v1.104.4@sha256:ed6480b33c6eb67c9cbd203ed42b9fb57e361986725b6856def71b7a3d9e276c
+    # At most this much memory, swap included. Security fix by Claude (audit 2026-11-26).
+    mem_limit: 256m
+    memswap_limit: 256m
     profiles: [tunnel]
     hostname: aireuskadi
     environment:
@@ -266,19 +316,27 @@ services:
   # opens only an outbound connection and publishes no port. It starts only with
   # COMPOSE_PROFILES=cloudflare in .env. The route (the domain -> http://api-gateway:8000) is set in
   # the panel of Cloudflare; the token of the tunnel is the secret aireuskadi-cloudflare-token of the
-  # Vault (fetch-secrets.sh), and cloudflared reads it from TUNNEL_TOKEN, never from the command line.
+  # Vault. fetch-secrets.sh writes it in a file of its own, /run/aireuskadi/tunnel/ (memory), mounted
+  # read-only here: it is never in the environment of the container nor on the command line.
   # Turn the profile on only once that secret exists: without the token cloudflared stops at once and
   # starts again and again.
   cloudflared:
     # By its digest: this container holds the token, and the timer pulls the images again.
     image: cloudflare/cloudflared:2026.11.2@sha256:55c7e3e8d89d5e8d20b75a82f3602cbf98e06db406e73e282073cfdc5a9a3af6
+    # At most this much memory, swap included. Security fix by Claude (audit 2026-11-26).
+    mem_limit: 256m
+    memswap_limit: 256m
     profiles: [cloudflare]
     command: [tunnel, --no-autoupdate, run]
     environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+      # The token as a file, not a variable: `docker inspect` would show a variable.
+      # Security fix by Claude (audit 2026-11-26).
+      TUNNEL_TOKEN_FILE: /run/tunnel/CLOUDFLARE_TUNNEL_TOKEN
       # Its metrics only inside the container: by default they listen on every address, and the
       # gateway, on the same network, could read them.
       TUNNEL_METRICS: 127.0.0.1:20241
+    volumes:
+      - /run/aireuskadi/tunnel:/run/tunnel:ro
     depends_on:
       api-gateway:
         condition: service_healthy
@@ -294,11 +352,19 @@ services:
   # Centralised logs and metrics. Alloy reads the logs of every container and sends them to Loki,
   # and the metrics (state, CPU, memory...) to Prometheus; Grafana shows both. They are on the
   # network `monitoring` only, which the gateway shares with them and nothing else does: Grafana
-  # trusts the user that the gateway names (auth proxy), so nothing else may reach it.
+  # trusts the user that the gateway names (auth proxy), and only from the fixed address of the
+  # gateway (GF_AUTH_PROXY_WHITELIST).
   # The same as in docker-compose.yml. The images are pinned: a new version comes only when this
   # file names it.
   loki:
-    image: grafana/loki:3.5.7
+    # Pinned by digest: the timer pulls the images again. Security fix by Claude (audit 2026-11-26).
+    image: grafana/loki:3.5.7@sha256:0eaee7bf39cc83aaef46914fb58f287d4f4c4be6ec96b86c2ed55719a75e49c8
+    # Cannot answer for another address on the network (ARP).
+    # Security fix by Claude (audit 2026-11-26).
+    cap_drop: [NET_RAW]
+    # At most this much memory, swap included. Security fix by Claude (audit 2026-11-26).
+    mem_limit: 1g
+    memswap_limit: 1g
     command: -config.file=/etc/loki/config.yml
     volumes:
       - ./observability/loki.yml:/etc/loki/config.yml:ro
@@ -308,7 +374,14 @@ services:
     logging: *logging
 
   prometheus:
-    image: prom/prometheus:v3.5.0
+    # Pinned by digest: the timer pulls the images again. Security fix by Claude (audit 2026-11-26).
+    image: prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+    # Cannot answer for another address on the network (ARP).
+    # Security fix by Claude (audit 2026-11-26).
+    cap_drop: [NET_RAW]
+    # At most this much memory, swap included. Security fix by Claude (audit 2026-11-26).
+    mem_limit: 1g
+    memswap_limit: 1g
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -322,7 +395,11 @@ services:
     logging: *logging
 
   alloy:
-    image: grafana/alloy:v1.20.1
+    # Pinned by digest: the timer pulls the images again. Security fix by Claude (audit 2026-11-26).
+    image: grafana/alloy:v1.20.1@sha256:2aa2099af76c0098d4af7a4d6e48f86cb66dc1a000222ad927a1c67c6542d13f
+    # At most this much memory, swap included. Security fix by Claude (audit 2026-11-26).
+    mem_limit: 512m
+    memswap_limit: 512m
     command:
       - run
       - --storage.path=/var/lib/alloy/data
@@ -346,7 +423,15 @@ services:
     logging: *logging
 
   grafana:
-    image: grafana/grafana:12.0.0
+    # 12.4, by digest: 12.0 has known CVEs (CVE-2025-4123, -6023, -6197) and no more fixes.
+    # Security fix by Claude (audit 2026-11-26).
+    image: grafana/grafana:12.4.16@sha256:982fa6bf18cc38280a30bf08c3b673486067d4805b25a9d4756688a689a993c7
+    # Cannot answer for another address on the network (ARP).
+    # Security fix by Claude (audit 2026-11-26).
+    cap_drop: [NET_RAW]
+    # At most this much memory, swap included. Security fix by Claude (audit 2026-11-26).
+    mem_limit: 512m
+    memswap_limit: 512m
     environment:
       # The full admin of Grafana is the account of the site with this name.
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?set it in .env (the account that is the full admin of Grafana)}
@@ -363,6 +448,9 @@ services:
       GF_AUTH_PROXY_HEADER_NAME: X-WEBAUTH-USER
       GF_AUTH_PROXY_HEADER_PROPERTY: username
       GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      # The user is believed only from the gateway: Loki, Prometheus and Alloy are on the same
+      # network and could name any user. Security fix by Claude (audit 2026-11-26).
+      GF_AUTH_PROXY_WHITELIST: 10.89.2.10
       GF_AUTH_DISABLE_LOGIN_FORM: "true"
       # Nor a user and password on its API: the only way in is the gateway.
       GF_AUTH_BASIC_ENABLED: "false"
@@ -395,11 +483,23 @@ services:
     restart: unless-stopped
     logging: *logging
 
+# Fixed subnets: the gateway believes X-Forwarded-For only from `edge` (TUNNEL_NETWORK) and Grafana
+# only the gateway's address on `monitoring`. Security fix by Claude (audit 2026-11-26).
 networks:
   edge:
+    ipam:
+      config:
+        - subnet: 10.89.1.0/24
   cache:
+  logouts:
   insight:
   monitoring:
+    ipam:
+      config:
+        - subnet: 10.89.2.0/24
+          # The others get their addresses from the upper half only: never the gateway's .10.
+          # Security fix by Claude (audit 2026-11-26).
+          ip_range: 10.89.2.128/25
 
 volumes:
   postgres-data:

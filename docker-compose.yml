@@ -59,11 +59,28 @@ services:
         condition: service_healthy
     restart: "no"
 
+  # The logouts of the auth service (auth_service/logouts.py), apart from the cache: the auth
+  # service cannot touch what everybody is served, and a full cache cannot push a logout out. Full,
+  # it refuses a new logout instead (the auth service then keeps it in memory). No disk: a restart
+  # forgets the logouts of the last 8 hours. Its own network, with the auth service only.
+  # Security fix by Claude (audit 2026-11-26).
+  logouts:
+    image: redis:7.4.12-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "16mb", "--maxmemory-policy", "noeviction"]
+    networks: [logouts]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   # The cache of the gateway (services/api-gateway/src/api_gateway/cache.py). Nothing in it must
   # survive: no disk, and a ceiling of memory past which the oldest answers are dropped, so that
   # questions with made-up values cannot fill the machine.
   redis:
-    image: redis:7-alpine
+    # Pinned by digest: the timer pulls the images again. Security fix by Claude (audit 2026-11-26).
+    image: redis:7.4.12-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
     command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
     # Only the gateway reaches it, and it publishes no port: what is in it is served to the browser.
     networks: [cache]
@@ -114,6 +131,9 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       # Nobody can sign up with the name of the full admin of Grafana: the owner makes that one.
       GRAFANA_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      # The logouts, kept across a restart (auth_service/logouts.py).
+      # Security fix by Claude (audit 2026-11-26).
+      REDIS_URL: redis://logouts:6379/0
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -128,6 +148,8 @@ services:
       retries: 3
       start_period: 15s
     restart: unless-stopped
+    # `logouts` for its own Redis. Security fix by Claude (audit 2026-11-26).
+    networks: [default, logouts]
 
   # The questions to a language model (any API with the chat completions of OpenAI). Each person
   # logs in and types their own key in the panel: it comes with each question and is never kept.
@@ -193,6 +215,9 @@ services:
       INSIGHT_URL: http://insight-service:8000
       # Without it the gateway asks the services every time, as before.
       REDIS_URL: redis://redis:6379/0
+      # X-Forwarded-For is believed only from the network of the tunnels.
+      # Security fix by Claude (audit 2026-11-26).
+      TUNNEL_NETWORK: 10.89.1.0/24
       # /docs and /openapi.json, the whole API in one page: only here, never on the VM (the page
       # loads its scripts from a CDN, and the list of routes is the list of what can be probed).
       DOCS_ENABLED: "true"
@@ -200,7 +225,15 @@ services:
       - "127.0.0.1:${GATEWAY_PORT:-8080}:8000"
     # It also joins `edge`, the only network the tunnel is on, `cache`, the only one Redis is on,
     # `insight`, the only one the insight service is on, and `monitoring`, the only one Grafana is on.
-    networks: [default, edge, cache, insight, monitoring]
+    # A fixed address on `monitoring`: the only one that Grafana believes.
+    # Security fix by Claude (audit 2026-11-26).
+    networks:
+      default:
+      edge:
+      cache:
+      insight:
+      monitoring:
+        ipv4_address: 10.89.2.10
     depends_on:
       emissions-service:
         condition: service_healthy
@@ -231,7 +264,8 @@ services:
   # TS_AUTHKEY is only read the first time: afterwards the identity is in the tailscale-state volume.
   # The name is shared with the VM: stop one tunnel before starting the other.
   tunnel:
-    image: tailscale/tailscale:v1.104.4
+    # Pinned by digest: the timer pulls the images again. Security fix by Claude (audit 2026-11-26).
+    image: tailscale/tailscale:v1.104.4@sha256:ed6480b33c6eb67c9cbd203ed42b9fb57e361986725b6856def71b7a3d9e276c
     profiles: [tunnel]
     hostname: aireuskadi
     environment:
@@ -284,10 +318,15 @@ services:
   # Centralised logs and metrics. Alloy reads the logs of every container and sends them to Loki,
   # and the metrics (state, CPU, memory...) to Prometheus; Grafana shows both. They are on the
   # network `monitoring` only, which the gateway shares with them and nothing else does: Grafana
-  # trusts the user that the gateway names (auth proxy), so nothing else may reach it.
+  # trusts the user that the gateway names (auth proxy), and only from the fixed address of the
+  # gateway (GF_AUTH_PROXY_WHITELIST).
   # The Grafana stack (this block and observability/) was set up assisted by Claude.
   loki:
-    image: grafana/loki:3.5.7
+    # Pinned by digest: the timer pulls the images again. Security fix by Claude (audit 2026-11-26).
+    image: grafana/loki:3.5.7@sha256:0eaee7bf39cc83aaef46914fb58f287d4f4c4be6ec96b86c2ed55719a75e49c8
+    # Cannot answer for another address on the network (ARP).
+    # Security fix by Claude (audit 2026-11-26).
+    cap_drop: [NET_RAW]
     command: -config.file=/etc/loki/config.yml
     volumes:
       - ./observability/loki.yml:/etc/loki/config.yml:ro
@@ -296,7 +335,11 @@ services:
     restart: unless-stopped
 
   prometheus:
-    image: prom/prometheus:v3.5.0
+    # Pinned by digest: the timer pulls the images again. Security fix by Claude (audit 2026-11-26).
+    image: prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+    # Cannot answer for another address on the network (ARP).
+    # Security fix by Claude (audit 2026-11-26).
+    cap_drop: [NET_RAW]
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -309,7 +352,8 @@ services:
     restart: unless-stopped
 
   alloy:
-    image: grafana/alloy:v1.20.1
+    # Pinned by digest: the timer pulls the images again. Security fix by Claude (audit 2026-11-26).
+    image: grafana/alloy:v1.20.1@sha256:2aa2099af76c0098d4af7a4d6e48f86cb66dc1a000222ad927a1c67c6542d13f
     command:
       - run
       - --storage.path=/var/lib/alloy/data
@@ -332,7 +376,12 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:12.0.0
+    # 12.4, by digest: 12.0 has known CVEs (CVE-2025-4123, -6023, -6197) and no more fixes.
+    # Security fix by Claude (audit 2026-11-26).
+    image: grafana/grafana:12.4.16@sha256:982fa6bf18cc38280a30bf08c3b673486067d4805b25a9d4756688a689a993c7
+    # Cannot answer for another address on the network (ARP).
+    # Security fix by Claude (audit 2026-11-26).
+    cap_drop: [NET_RAW]
     environment:
       # The full admin of Grafana is the account of the site with this name.
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
@@ -349,6 +398,9 @@ services:
       GF_AUTH_PROXY_HEADER_NAME: X-WEBAUTH-USER
       GF_AUTH_PROXY_HEADER_PROPERTY: username
       GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      # The user is believed only from the gateway: Loki, Prometheus and Alloy are on the same
+      # network and could name any user. Security fix by Claude (audit 2026-11-26).
+      GF_AUTH_PROXY_WHITELIST: 10.89.2.10
       GF_AUTH_DISABLE_LOGIN_FORM: "true"
       # Nor a user and password on its API: the only way in is the gateway.
       GF_AUTH_BASIC_ENABLED: "false"
@@ -380,11 +432,23 @@ services:
       - prometheus
     restart: unless-stopped
 
+# Fixed subnets: the gateway believes X-Forwarded-For only from `edge` (TUNNEL_NETWORK) and Grafana
+# only the gateway's address on `monitoring`. Security fix by Claude (audit 2026-11-26).
 networks:
   edge:
+    ipam:
+      config:
+        - subnet: 10.89.1.0/24
   cache:
+  logouts:
   insight:
   monitoring:
+    ipam:
+      config:
+        - subnet: 10.89.2.0/24
+          # The others get their addresses from the upper half only: never the gateway's .10.
+          # Security fix by Claude (audit 2026-11-26).
+          ip_range: 10.89.2.128/25
 
 volumes:
   postgres-data:
