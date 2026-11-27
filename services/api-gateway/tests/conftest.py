@@ -71,7 +71,7 @@ def admin_client(upstreams, auth, grafana):
         ),
     )
     with TestClient(app, base_url="https://testserver") as client:
-        client.cookies.set("aireuskadi_session", "the-jwt")
+        client.cookies.set("__Host-aireuskadi_session", "the-jwt")
         yield client
 
 

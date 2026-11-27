@@ -18,7 +18,7 @@ def test_a_sign_up_logs_in_and_goes_back_to_the_map_and_is_never_an_admin(
 
     assert answer.status_code == 303
     assert answer.headers["location"] == "/"
-    assert "aireuskadi_session=" in answer.headers["set-cookie"]
+    assert "__Host-aireuskadi_session=" in answer.headers["set-cookie"]
     assert fake_accounts.find_by_name("user1").is_admin is False
 
 

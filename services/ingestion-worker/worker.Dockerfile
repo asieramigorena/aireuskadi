@@ -4,9 +4,12 @@
 # It is not called "Dockerfile" on purpose: deploy-pro.yml builds a file with that exact name using its
 # own folder as context, and a file called <name>.Dockerfile in a folder of services/ using the root
 # of the repository as context, which is what this one needs.
-FROM python:3.12-slim
+# The base image by its digest: a tag can be published again.
+# Security fix by Claude (audit 2026-11-26).
+FROM python:3.12-slim@sha256:191083cdf6c7bda8c76158983163ead5d5cf7b77cf3033e805bb0f5296f51b4b
 
-COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /usr/local/bin/uv
+# uv by its digest too: it goes into every image. Security fix by Claude (audit 2026-11-26).
+COPY --from=ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 /uv /usr/local/bin/uv
 
 ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \

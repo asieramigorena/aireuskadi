@@ -131,3 +131,38 @@ def test_an_address_ipv4_written_as_ipv6_is_still_its_own_person(limited):
 
     assert ask(limited, ip="::ffff:203.0.113.7").status_code == 429
     assert ask(limited, ip="::ffff:203.0.113.8").status_code == 200
+
+
+def gateway_behind(upstreams, web_dir, clock, peer):
+    """A gateway that believes X-Forwarded-For only from the network of the tunnels, asked from
+    the address `peer`."""
+    emissions_client, air_quality_client = upstreams
+    app = create_app(
+        emissions_client,
+        air_quality=air_quality_client,
+        web_dir=web_dir,
+        rate_limit=RateLimit(limit=3, clock=clock),
+        tunnel_network="10.89.1.0/24",
+    )
+    return TestClient(app, client=(peer, 50000))
+
+
+def test_from_outside_the_network_of_the_tunnels_the_header_is_not_believed(
+    upstreams, web_dir, clock
+):
+    # Another container (Grafana, Loki...) could write any X-Forwarded-For: it is the address of
+    # the connection that counts, so it cannot pass as many people, nor as somebody else.
+    with gateway_behind(upstreams, web_dir, clock, "10.89.2.5") as client:
+        for made_up in ("203.0.113.1", "203.0.113.2", "203.0.113.3"):
+            assert ask(client, ip=made_up).status_code == 200
+
+        assert ask(client, ip="203.0.113.4").status_code == 429
+
+
+def test_from_the_network_of_the_tunnels_the_header_is_believed(upstreams, web_dir, clock):
+    with gateway_behind(upstreams, web_dir, clock, "10.89.1.3") as client:
+        for _ in range(3):
+            ask(client, ip="203.0.113.7")
+
+        assert ask(client, ip="203.0.113.7").status_code == 429
+        assert ask(client, ip="203.0.113.8").status_code == 200

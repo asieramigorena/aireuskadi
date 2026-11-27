@@ -24,7 +24,7 @@ def test_the_page_of_the_auth_service_comes_back_as_it_is(admin_client, auth):
 
 def test_the_login_form_goes_on_and_its_cookie_and_redirect_come_back(admin_client, auth):
     auth.respond(
-        303, b"", headers={"location": "/grafana/", "set-cookie": "aireuskadi_session=new"}
+        303, b"", headers={"location": "/grafana/", "set-cookie": "__Host-aireuskadi_session=new"}
     )
     admin_client.cookies.set("grafana_session", "g1")
 
@@ -36,9 +36,9 @@ def test_the_login_form_goes_on_and_its_cookie_and_redirect_come_back(admin_clie
     assert sent.method == "POST"
     assert sent.content == b"username=user1&password=p"
     # Only our cookie: the auth service has nothing to do with the session of Grafana.
-    assert sent.headers["cookie"] == "aireuskadi_session=the-jwt"
+    assert sent.headers["cookie"] == "__Host-aireuskadi_session=the-jwt"
     assert (answer.status_code, answer.headers["location"]) == (303, "/grafana/")
-    assert answer.headers["set-cookie"] == "aireuskadi_session=new"
+    assert answer.headers["set-cookie"] == "__Host-aireuskadi_session=new"
 
 
 def test_the_auth_service_down_is_a_fixed_502(admin_client, auth):

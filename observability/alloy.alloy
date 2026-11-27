@@ -84,9 +84,10 @@ prometheus.scrape "containers" {
 // `service` is the name of the Compose service ("redis", "ingestion-scheduler"...). cAdvisor does
 // not always know the labels of Compose (with the containerd image store it may take minutes or
 // never), but it always gives the image, so the service is taken from the image when the label
-// is missing: "docker.io/library/aireuskadi-postgres:latest" is "postgres", "redis:7-alpine" is
-// "redis", "grafana/grafana:12.0.0" is "grafana". What has no image is not a container, and the
-// labels that would put the paths of the machine into every series are dropped.
+// is missing: "docker.io/library/aireuskadi-postgres:latest" is "postgres",
+// "redis:7.4.12-alpine@sha256:..." is "redis", "grafana/grafana:12.4.16@sha256:..." is "grafana".
+// What has no image is not a container, and the labels that would put the paths of the machine
+// into every series are dropped.
 prometheus.relabel "containers" {
   forward_to = [prometheus.remote_write.prometheus.receiver]
 

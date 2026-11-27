@@ -3,9 +3,18 @@
 The accounts are a fake (FakeAccounts in conftest.py): these tests run without a database.
 """
 
+import time
+
 import pytest
+import redis
+from auth_service.main import create_app
+from auth_service.session import COOKIE
+from fastapi.testclient import TestClient
 
 PASSWORD = "a-long-password-1"
+# The secret of conftest.py, and the address of the site (https, so that the Secure cookie comes back).
+JWT_SECRET = "x" * 32
+HTTPS = "https://testserver"
 
 
 def log_in(client, username, password, person="203.0.113.7"):
@@ -29,9 +38,13 @@ def test_a_good_login_sets_the_cookie_and_goes_to_the_panel_or_to_the_map(
 
     assert answer.status_code == 303
     assert answer.headers["location"] == "/admin"
-    cookie = answer.headers["set-cookie"].lower()
-    for flag in ("aireuskadi_session=", "httponly", "secure", "samesite=strict", "max-age=28800"):
-        assert flag in cookie
+    cookie = answer.headers["set-cookie"]
+    # __Host-: the browser keeps it only for this very name and path /, sent over https, so that no
+    # other name under the domain (anything.aireuskadi.eus) can set or replace it.
+    assert cookie.startswith("__Host-aireuskadi_session=")
+    assert "domain=" not in cookie.lower()
+    for flag in ("path=/", "httponly", "secure", "samesite=strict", "max-age=28800"):
+        assert flag in cookie.lower()
 
 
 def test_an_unknown_user_and_a_wrong_password_get_the_same_answer(admin_client, fake_accounts):
@@ -234,10 +247,10 @@ def test_a_form_sent_from_another_site_is_refused(admin_client, fake_accounts, s
 def test_after_the_logout_the_old_token_is_worth_nothing(admin_client, fake_accounts, written):
     # The JWT library also accepts the token with a "=" at the end: it is the same token.
     fake_accounts.add("user1", PASSWORD)
-    token = log_in(admin_client, "user1", PASSWORD).cookies["aireuskadi_session"]
+    token = log_in(admin_client, "user1", PASSWORD).cookies[COOKIE]
 
     admin_client.post("/user/logout")
-    admin_client.cookies.set("aireuskadi_session", token if written == "as it was" else token + "=")
+    admin_client.cookies.set(COOKIE, token if written == "as it was" else token + "=")
 
     assert admin_client.get("/me").status_code == 401
 
@@ -251,11 +264,11 @@ def test_the_redirects_are_not_kept_and_send_no_referrer(admin_client):
 
 def test_a_logout_with_a_token_that_is_not_ours_keeps_nothing_in_memory(admin_client):
     # Anyone can send a logout with any cookie: only real tokens are remembered.
-    admin_client.cookies.set("aireuskadi_session", "x" * 5000)
+    admin_client.cookies.set(COOKIE, "x" * 5000)
 
     admin_client.post("/user/logout")
 
-    assert admin_client.app.state.logged_out == set()
+    assert admin_client.app.state.logged_out.memory == set()
 
 
 def test_the_pages_have_the_icon_of_the_map_in_the_tab(admin_client):
@@ -264,3 +277,55 @@ def test_the_pages_have_the_icon_of_the_map_in_the_tab(admin_client):
 
     assert '<link rel="icon" href="data:image/svg+xml,' in answer.text
     assert "img-src data:" in answer.headers["content-security-policy"]
+
+
+class FakeRedis:
+    """What the logouts use of Redis: set with an expiry and exists."""
+
+    def __init__(self):
+        self.kept = {}
+        self.down = False
+
+    def set(self, key, value, exat):
+        if self.down:
+            raise redis.ConnectionError("down")
+        self.kept[key] = exat
+
+    def exists(self, key):
+        if self.down:
+            raise redis.ConnectionError("down")
+        return int(key in self.kept)
+
+
+def test_a_logout_is_remembered_after_a_restart_thanks_to_redis(fake_accounts):
+    # In memory only, a restart of the service forgot it: the old token opened again for hours.
+    shared = FakeRedis()
+    fake_accounts.add("user1", PASSWORD)
+    with TestClient(
+        create_app(fake_accounts, JWT_SECRET, logout_store=shared), base_url=HTTPS
+    ) as before:
+        token = log_in(before, "user1", PASSWORD).cookies[COOKIE]
+        before.post("/user/logout")
+
+    with TestClient(
+        create_app(fake_accounts, JWT_SECRET, logout_store=shared), base_url=HTTPS
+    ) as after:
+        after.cookies.set(COOKIE, token)
+        assert after.get("/me").status_code == 401
+    # It is kept until the token would have expired anyway, not for ever.
+    (expiry,) = shared.kept.values()
+    assert expiry > time.time()
+
+
+def test_with_redis_down_a_logout_still_counts_until_the_service_restarts(fake_accounts):
+    down = FakeRedis()
+    down.down = True
+    fake_accounts.add("user1", PASSWORD)
+    with TestClient(
+        create_app(fake_accounts, JWT_SECRET, logout_store=down), base_url=HTTPS
+    ) as client:
+        token = log_in(client, "user1", PASSWORD).cookies[COOKIE]
+        assert client.post("/user/logout", follow_redirects=False).status_code == 303
+        client.cookies.set(COOKIE, token)
+
+        assert client.get("/me").status_code == 401

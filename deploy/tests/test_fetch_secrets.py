@@ -123,11 +123,16 @@ def test_a_folder_that_was_there_is_not_changed_the_file_inside_is_what_keeps_th
 
 
 def test_no_temporary_file_is_left_behind_after_a_success_or_a_failure(machine):
+    (machine["secrets"] / "aireuskadi-cloudflare-token").write_text(CLOUDFLARE)
     run(machine)
     machine["fail"].write_text("aireuskadi-reader-password\n")
     run(machine)
 
-    assert sorted(path.name for path in machine["out"].parent.iterdir()) == ["secrets.env"]
+    folder = machine["out"].parent
+    assert sorted(path.name for path in folder.iterdir()) == ["secrets.env", "tunnel"]
+    assert sorted(path.name for path in (folder / "tunnel").iterdir()) == [
+        "CLOUDFLARE_TUNNEL_TOKEN"
+    ]
 
 
 def test_the_script_is_executable_because_systemd_runs_it_directly_and_not_with_bash():
@@ -314,12 +319,47 @@ def test_a_key_of_a_tunnel_that_could_add_lines_or_commands_to_the_file_is_refus
     assert "other" not in result.stdout + result.stderr
 
 
-def test_the_token_of_cloudflare_is_written_with_its_base64_characters(machine):
+def tunnel_token(machine) -> Path:
+    # The token of Cloudflare: a file of its own next to the file of the variables, never in it,
+    # so that `docker inspect` does not show it. cloudflared reads it (TUNNEL_TOKEN_FILE in
+    # docker-compose.prod.yml).
+    return machine["out"].parent / "tunnel" / "CLOUDFLARE_TUNNEL_TOKEN"
+
+
+def test_the_token_of_cloudflare_goes_to_a_file_of_its_own_with_its_base64_characters(machine):
     # The token is base64 and does not go inside a URL: "+", "/" and "=" are allowed for it only.
     (machine["secrets"] / "aireuskadi-cloudflare-token").write_text(CLOUDFLARE)
 
     result = run(machine)
 
     assert result.returncode == 0, result.stderr
-    assert written(machine)["CLOUDFLARE_TUNNEL_TOKEN"] == CLOUDFLARE
+    assert tunnel_token(machine).read_text() == CLOUDFLARE
+    assert "CLOUDFLARE_TUNNEL_TOKEN" not in written(machine)
+    assert CLOUDFLARE not in machine["out"].read_text()
     assert CLOUDFLARE not in result.stdout + result.stderr
+    # Readable by the user of the container of cloudflared (not root); nobody can change it.
+    assert stat.S_IMODE(tunnel_token(machine).stat().st_mode) == 0o444
+
+
+def test_without_the_token_of_cloudflare_its_old_file_is_removed(machine):
+    (machine["secrets"] / "aireuskadi-cloudflare-token").write_text(CLOUDFLARE)
+    run(machine)
+    (machine["secrets"] / "aireuskadi-cloudflare-token").unlink()
+
+    result = run(machine)
+
+    assert result.returncode == 0, result.stderr
+    assert not tunnel_token(machine).exists()
+
+
+def test_when_the_vault_cannot_be_read_the_token_of_cloudflare_that_was_there_is_kept(machine):
+    # A failure of the network or of the CLI is not "the secret is gone": removing the token would
+    # take the tunnel down at its next start.
+    (machine["secrets"] / "aireuskadi-cloudflare-token").write_text(CLOUDFLARE)
+    run(machine)
+    machine["fail"].write_text("aireuskadi-cloudflare-token\n")
+
+    result = run(machine)
+
+    assert result.returncode == 0, result.stderr
+    assert tunnel_token(machine).read_text() == CLOUDFLARE

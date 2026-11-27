@@ -16,6 +16,7 @@ from aireuskadi_http import problem
 from fastapi import APIRouter, Header, Path, Query, Request, Response
 
 from api_gateway.admin import session_name
+from api_gateway.rate_limit import person_of
 from api_gateway.routes import UNIT_CODE, ask, compose_card, json_or_none
 
 router = APIRouter()
@@ -26,6 +27,7 @@ UNIT_SECONDS = 7 * 24 * 3600
 GENERAL_SECONDS = 30 * 24 * 3600
 NOT_AVAILABLE = "The text is not available right now."
 TOO_MANY = "Too many questions right now."
+TOO_MANY_KEYS = "Too many requests with a key right now: try again later."
 TOO_MANY_LISTS = "Too many requests for the list of models right now."
 TOPIC = r"^(who_ratio|density|pollutant:[A-Z0-9_]{1,20})$"
 
@@ -113,6 +115,13 @@ def general_key(topic: str, lang: str, provider: str, model: str) -> str:
     return f"general:{topic}:{lang}:{provider}:{model}"
 
 
+def key_try_allowed(request: Request) -> bool:
+    """Counts one request that sends a key to a provider, for the person (rate_limit.py). The
+    insight service counts per account, and a person can make several accounts: without this they
+    could try many stolen keys. Security fix by Claude (audit 2026-11-26)."""
+    return request.app.state.key_tries.allows(person_of(request))
+
+
 async def answer(
     request: Request, key: str, seconds: int, question: dict, llm: dict[str, str]
 ) -> Response:
@@ -123,6 +132,8 @@ async def answer(
         kept = await cache.get(key)
         if kept is not None:
             return Response(kept, media_type="application/json")
+    if not key_try_allowed(request):
+        return problem(HTTPStatus.TOO_MANY_REQUESTS, TOO_MANY_KEYS)
     try:
         written = await request.app.state.insight.post("/insight", json=question, headers=llm)
     except httpx.HTTPError:
@@ -226,6 +237,8 @@ async def llm_models(request: Request, provider: Provider, x_llm_key: LlmKey):
         return problem(HTTPStatus.UNAUTHORIZED, NOT_LOGGED_IN)
     # The account too: the insight service counts the lists of each one.
     headers = {"X-LLM-Provider": provider, "X-LLM-Key": x_llm_key, "X-Account": account}
+    if not key_try_allowed(request):
+        return problem(HTTPStatus.TOO_MANY_REQUESTS, TOO_MANY_KEYS)
     try:
         answer = await request.app.state.insight.get("/models", headers=headers)
     except httpx.HTTPError:

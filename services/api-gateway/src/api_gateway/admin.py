@@ -17,7 +17,9 @@ from api_gateway.relay import headers_to_send, relay
 router = APIRouter(include_in_schema=False)
 
 # The cookie with the JWT, set by the auth service at the login.
-COOKIE = "aireuskadi_session"
+# __Host-: the browser keeps it only with this name, for path / and over https, so that no other
+# name under the domain can set or replace it. Security fix by Claude (audit 2026-11-26).
+COOKIE = "__Host-aireuskadi_session"
 # The biggest body of a request to the accounts: their forms are a few hundred bytes. The body is
 # kept in memory before it is passed on, and anyone can send one, so a bigger one is refused.
 MAX_FORM_BYTES = 64 * 1024

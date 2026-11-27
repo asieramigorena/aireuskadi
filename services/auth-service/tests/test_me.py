@@ -16,7 +16,7 @@ def test_user_me_says_only_the_name_and_the_same_401_for_any_bad_cookie(logged_i
     # /user/me is for the page of the map: it says whether someone is logged in, and who.
     assert logged_in_as("user1", is_admin=True).get("/user/me").json() == {"username": "user1"}
 
-    admin_client.cookies.set("aireuskadi_session", "forged")
+    admin_client.cookies.set("__Host-aireuskadi_session", "forged")
     forged = admin_client.get("/user/me")
     admin_client.cookies.clear()
     missing = admin_client.get("/user/me")

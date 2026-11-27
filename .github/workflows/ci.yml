@@ -24,6 +24,8 @@ concurrency:
 permissions:
   contents: read
 
+# The actions of others are pinned by commit (the comment says its version).
+# Security fix by Claude (audit 2026-11-26).
 jobs:
   branch-flow:
     name: Branch flow (dev -> pro -> main)
@@ -49,7 +51,7 @@ jobs:
       docker: ${{ steps.find.outputs.docker }}
       compose: ${{ steps.find.outputs.compose }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Find components
         id: find
         run: |
@@ -78,12 +80,28 @@ jobs:
         dir: ${{ fromJSON(needs.discover.outputs.python) }}
     name: Python (${{ matrix.dir }})
     runs-on: ubuntu-latest
+    # A PostgreSQL with PostGIS, so that the tests of the database run here too: the timing of the
+    # login, the grants of the roles, the migrations. The plugin of the tests makes its own
+    # database on it (packages/db/tests/testing.py). Security fix by Claude (audit 2026-11-26).
+    services:
+      postgres:
+        image: postgis/postgis:17-3.7@sha256:29619efaa36ece13e4e5abf69fe03f49b4f27f64ef01fc4c3f20b4f2228f7418
+        env:
+          POSTGRES_USER: aireuskadi
+          POSTGRES_PASSWORD: only-for-ci
+          POSTGRES_DB: aireuskadi
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U aireuskadi" --health-interval 5s --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://aireuskadi:only-for-ci@localhost:5432/aireuskadi
     defaults:
       run:
         working-directory: ${{ matrix.dir }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           python-version: "3.12"
           enable-cache: true
@@ -130,8 +148,8 @@ jobs:
       run:
         working-directory: ${{ matrix.dir }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
       - name: Install
@@ -167,10 +185,10 @@ jobs:
     name: Docker build (${{ matrix.dir }})
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Build image (not pushed)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ${{ matrix.dir }}
           push: false
@@ -183,7 +201,7 @@ jobs:
     name: Compose file
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Validate
         env:
           COMPOSE_FILE: ${{ needs.discover.outputs.compose }}

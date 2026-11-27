@@ -4,10 +4,11 @@ window of time (a minute by default) and per person, kept in memory.
 The person is the LAST address of the header X-Forwarded-For. Cloudflare adds the address of the
 client at the end of that header, after whatever the client wrote in it, and Tailscale Funnel
 replaces the header with it: either way only the last one is true. An IPv6 address counts by its
-network /64, which is what one home or one machine gets: all of it is one person. Without a tunnel
-(on this machine) it is the address of the connection. In production only the tunnel reaches the
-gateway, so nobody else can add to that header. The counts are kept in memory, only for the window
-that is going on: a restart forgets them, which is enough for one gateway.
+network /64, which is what one home or one machine gets: all of it is one person. The header is
+believed only from the network of the tunnels (TUNNEL_NETWORK): from any other address, another
+container or this machine, the person is the address of the connection. The counts are kept in
+memory, only for the window that is going on: a restart forgets them, which is enough for one
+gateway.
 """
 
 import ipaddress
@@ -52,13 +53,28 @@ class RateLimit:
         return self.counts[person] <= self.limit
 
 
+def in_network(address: str, network: str) -> bool:
+    """Whether `address` is an address of `network` ("10.89.1.0/24"); False if it is not one."""
+    try:
+        return ipaddress.ip_address(address) in ipaddress.ip_network(network)
+    except ValueError:
+        return False
+
+
 def person_of(request: Request) -> str:
     """The address of the client: the last one of X-Forwarded-For, or the one of the connection.
     The header can come more than once; it is read as one list, like the tunnel reads it."""
+    peer = request.client.host if request.client else ""
+    # The header is believed only from the network of the tunnels (TUNNEL_NETWORK, main.py): any
+    # other container could write it. Without that network (this machine, the tests) it always is.
+    # Security fix by Claude (audit 2026-11-26).
+    tunnels = request.app.state.tunnel_network
+    if tunnels is not None and not in_network(peer, tunnels):
+        return peer
     # Security fix by Claude (audit 2026-11-26): the last address, and IPv6 by its network /64.
     forwarded = ",".join(request.headers.getlist("x-forwarded-for"))
     last = forwarded.split(",")[-1].strip()
-    address = last or (request.client.host if request.client else "")
+    address = last or peer
     try:
         ip = ipaddress.ip_address(address)
     except ValueError:
