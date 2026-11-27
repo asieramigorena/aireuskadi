@@ -86,7 +86,7 @@ describe("the year when the address says none", () => {
 });
 
 describe("the language that the person chose", () => {
-  test("is in the address, and only when it was chosen: without it the browser decides", () => {
+  test("is in the address, and only when it was chosen: without it the page is in Basque", () => {
     expect(parseLocation("/", "").selection).not.toHaveProperty("lang");
     expect(parseLocation("/", "?lang=eu").selection.lang).toBe("eu");
     expect(parseLocation("/", "?lang=es").selection.lang).toBe("es");

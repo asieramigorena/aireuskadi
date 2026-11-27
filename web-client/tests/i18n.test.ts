@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { LANGUAGES, detectLanguage, isLanguage, language, setLanguage, texts, textsOf } from "../src/i18n";
+import { LANGUAGES, isLanguage, pageLanguage, language, setLanguage, texts, textsOf } from "../src/i18n";
 
 // The pollutants of the emissions, as the API lists them (GET /pollutants).
 const EMISSION_CODES = [
@@ -26,31 +26,15 @@ describe("the languages", () => {
   );
 });
 
-describe("detectLanguage: the language that the browser of the visitor asks for", () => {
-  test.each([
-    [["eu"], "eu"],
-    [["eu-ES"], "eu"],
-    [["es-ES", "en"], "es"],
-    [["es-419"], "es"],
-    [["en-GB", "es"], "en"],
-    [["EU-es"], "eu"],
-    [["fr", "eu"], "eu"],
-    [["fr-FR", "en-GB"], "en"],
-    [["pt-BR", "de", "es"], "es"],
-  ])("%j is %s: the first language of the list that the page has", (preferred, expected) => {
-    expect(detectLanguage(preferred)).toBe(expected);
+describe("pageLanguage: the language of the page", () => {
+  test("Basque unless one was chosen: the site is .eus, whatever the browser asks for", () => {
+    expect(pageLanguage(null)).toBe("eu");
   });
 
-  test("a browser that asks for none of them, or for nothing, gets English", () => {
-    expect(detectLanguage(["fr", "de-AT", "zh-Hans"])).toBe("en");
-    expect(detectLanguage([])).toBe("en");
+  test("the one chosen with the buttons or ?lang=", () => {
+    expect(pageLanguage("es")).toBe("es");
+    expect(pageLanguage("en")).toBe("en");
   });
-
-  test("what is not a language tag is skipped, and does not stop the search", () => {
-    expect(detectLanguage(["", "  ", "*", "eu-"])).toBe("eu");
-    expect(detectLanguage(["", "*"])).toBe("en");
-  });
-
 });
 
 describe("the language in use", () => {

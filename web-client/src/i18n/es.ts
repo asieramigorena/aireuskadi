@@ -16,6 +16,8 @@ export const es: Texts = {
   emissionsCredit: "Emisiones: registro E-PRTR, Open Data Euskadi, CC BY 4.0.",
   airCredit: (attribution) => `Calidad del aire: ${attribution}`,
   loadingMap: "Cargando el mapa…",
+  pageDescription:
+    "Mapa 3D de la calidad del aire y de las emisiones industriales declaradas de Euskadi, municipio a municipio.",
   pageNotFound: "Esta página no existe.",
 
   serviceUnreachable: "No se puede contactar con el servicio.",

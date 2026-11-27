@@ -1,36 +1,54 @@
 <!doctype html>
-<html lang="en">
+<html lang="eu">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>AirEuskadi</title>
+    <!-- The page is in Basque (the site is .eus; src/i18n pageLanguage): these texts are the Basque
+         ones, for whoever reads the page without running it. src/page.ts writes them again when
+         Spanish or English is chosen. -->
+    <!-- What a search engine shows under the name. -->
+    <meta name="description" content="Euskadiko aire kalitatearen eta aitortutako industria-isurien 3D mapa, udalerriz udalerri." />
+    <!-- The same page in its three languages, so that each one is found in its own language. They
+         hold for the main page (/): the pages of a unit or of the trend have no versions of their own. -->
+    <link rel="alternate" hreflang="eu" href="https://aireuskadi.eus/" />
+    <link rel="alternate" hreflang="es" href="https://aireuskadi.eus/?lang=es" />
+    <link rel="alternate" hreflang="en" href="https://aireuskadi.eus/?lang=en" />
+    <link rel="alternate" hreflang="x-default" href="https://aireuskadi.eus/" />
+    <!-- What a link to the page shows when it is shared (messages, social networks). -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="AirEuskadi" />
+    <meta property="og:description" content="Euskadiko aire kalitatearen eta aitortutako industria-isurien 3D mapa, udalerriz udalerri." />
+    <meta property="og:locale" content="eu_ES" />
+    <meta property="og:locale:alternate" content="es_ES" />
+    <meta property="og:locale:alternate" content="en_GB" />
     <!-- The emoji of the wind as the icon of the tab: an SVG in the page, so no file and no request. -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌬️</text></svg>" />
   </head>
   <body>
     <main id="app">
-      <div id="map" role="img" aria-label="3D map of the declared industrial emissions of the Basque Country"></div>
+      <div id="map" role="img" aria-label="Euskadiko isuri industrial aitortuen 3D mapa"></div>
 
       <header class="caption">
         <div class="brand">
           <h1>AirEuskadi</h1>
-          <nav id="languages" class="languages" aria-label="Language"></nav>
-          <a id="login-link" class="login-link" href="/user">Log in</a>
+          <nav id="languages" class="languages" aria-label="Hizkuntza"></nav>
+          <a id="login-link" class="login-link" href="/user">Saioa hasi</a>
         </div>
-        <nav id="controls" class="controls" aria-label="Choose the map"></nav>
+        <nav id="controls" class="controls" aria-label="Aukeratu mapa"></nav>
         <p id="caption"></p>
         <p id="status" role="status"></p>
       </header>
 
-      <aside id="panel" aria-label="Details of the unit" hidden></aside>
+      <aside id="panel" aria-label="Unitatearen xehetasunak" hidden></aside>
 
       <!-- The questions to a language model, in a corner, always there (src/ask.ts). -->
       <section id="ask" class="ask-box"></section>
 
-      <section id="legend" class="legend" aria-label="Colour of the units"></section>
+      <section id="legend" class="legend" aria-label="Unitateen kolorea"></section>
 
       <footer class="credits">
-        <p id="emissions-credit">Emissions: E-PRTR register, Open Data Euskadi, CC BY 4.0.</p>
+        <p id="emissions-credit">Isuriak: E-PRTR erregistroa, Open Data Euskadi, CC BY 4.0.</p>
         <p id="air-credit"></p>
         <p id="attribution"></p>
       </footer>
