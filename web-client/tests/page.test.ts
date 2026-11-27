@@ -5,6 +5,7 @@ import { applyPageTexts, setAccountName } from "../src/page";
 // The parts of index.html that have a text that is not drawn by anything else.
 function mount() {
   document.documentElement.lang = "en";
+  document.head.innerHTML = `<meta name="description" content="">`;
   document.body.innerHTML = `
     <div id="map" role="img" aria-label=""></div>
     <nav id="controls" aria-label=""></nav>
@@ -17,6 +18,8 @@ function mount() {
 
 const label = (id: string) => document.getElementById(id)?.getAttribute("aria-label");
 const text = (id: string) => document.getElementById(id)?.textContent;
+// The text that a search engine shows under the name of the page.
+const description = () => document.querySelector('meta[name="description"]')?.getAttribute("content");
 
 beforeEach(mount);
 afterEach(() => setLanguage("en"));
@@ -31,6 +34,9 @@ describe("the texts of the page that nothing else draws", () => {
     expect(label("panel")).toBe("Details of the unit");
     expect(label("map")).toBe("3D map of the declared industrial emissions of the Basque Country");
     expect(text("emissions-credit")).toBe("Emissions: E-PRTR register, Open Data Euskadi, CC BY 4.0.");
+    expect(description()).toBe(
+      "3D map of the air quality and of the declared industrial emissions of the Basque Country, municipality by municipality.",
+    );
   });
 
   test("in Spanish", () => {
@@ -42,6 +48,9 @@ describe("the texts of the page that nothing else draws", () => {
     expect(label("languages")).toBe("Idioma");
     expect(label("panel")).toBe("Detalles de la unidad");
     expect(text("emissions-credit")).toBe("Emisiones: registro E-PRTR, Open Data Euskadi, CC BY 4.0.");
+    expect(description()).toBe(
+      "Mapa 3D de la calidad del aire y de las emisiones industriales declaradas de Euskadi, municipio a municipio.",
+    );
   });
 
   test("in Basque", () => {
@@ -53,6 +62,9 @@ describe("the texts of the page that nothing else draws", () => {
     expect(label("languages")).toBe("Hizkuntza");
     expect(label("panel")).toBe("Unitatearen xehetasunak");
     expect(text("emissions-credit")).toBe("Isuriak: E-PRTR erregistroa, Open Data Euskadi, CC BY 4.0.");
+    expect(description()).toBe(
+      "Euskadiko aire kalitatearen eta aitortutako industria-isurien 3D mapa, udalerriz udalerri.",
+    );
   });
 
   test("the label of the map says which map it is, in the language", () => {

@@ -15,16 +15,11 @@ const DICTIONARIES: Record<Language, Texts> = { eu, es, en };
 
 export const isLanguage = (value: string): value is Language => (LANGUAGES as readonly string[]).includes(value);
 
-/** The language that a browser asks for: the first one of its list (`navigator.languages`) that the
- * page has, whatever the region ("es-419" is Spanish), and English for a visitor who asks for none of
- * them. What is not a language tag is skipped. */
-export function detectLanguage(preferred: readonly string[]): Language {
-  for (const tag of preferred) {
-    if (typeof tag !== "string") continue;
-    const primary = tag.trim().toLowerCase().split("-")[0];
-    if (isLanguage(primary)) return primary;
-  }
-  return "en";
+/** The language of the page: the one chosen (the buttons, or `?lang=` in the address), else Basque,
+ * whatever the browser asks for. The site is .eus, the domain of the Basque language: Basque is the
+ * language of the page, and Spanish and English are choices. */
+export function pageLanguage(chosen: Language | null): Language {
+  return chosen ?? "eu";
 }
 
 // English until the page chooses: the tests of everything that writes a text read English.

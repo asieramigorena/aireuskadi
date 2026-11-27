@@ -18,6 +18,7 @@ export const eu: Texts = {
   emissionsCredit: "Isuriak: E-PRTR erregistroa, Open Data Euskadi, CC BY 4.0.",
   airCredit: (attribution) => `Aire kalitatea: ${attribution}`,
   loadingMap: "Mapa kargatzen…",
+  pageDescription: "Euskadiko aire kalitatearen eta aitortutako industria-isurien 3D mapa, udalerriz udalerri.",
   pageNotFound: "Orri hau ez da existitzen.",
 
   serviceUnreachable: "Ezin da zerbitzuarekin konektatu.",

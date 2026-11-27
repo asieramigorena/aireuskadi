@@ -28,6 +28,7 @@ export interface Texts {
   emissionsCredit: string;
   airCredit: (attribution: string) => string;
   loadingMap: string;
+  pageDescription: string;
   pageNotFound: string;
 
   // What is said when a call fails.

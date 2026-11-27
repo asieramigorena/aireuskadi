@@ -6,7 +6,7 @@ import { formatDensity, mapCaption } from "./format";
 import { HEXAGON_MAX_RADIUS, hexRadiusForZoom } from "./hexagons";
 import { buildAirLayers, buildLayers } from "./layers";
 import { createStatus } from "./status";
-import { detectLanguage, language, setLanguage, texts, type Language } from "./i18n";
+import { language, pageLanguage, setLanguage, texts, type Language } from "./i18n";
 import { levelForZoom } from "./levels";
 import { renderLegend } from "./legend";
 import { createMap } from "./map";
@@ -265,9 +265,8 @@ function onState(state: State) {
     selection!.pollutant !== state.selection.pollutant ||
     selection!.year !== state.selection.year;
   const viewChanged = first || selection!.view !== state.selection.view;
-  // The language that the person chose; if none, the one that the browser asks for (English if it is
-  // neither Basque nor Spanish).
-  const wanted = state.selection.lang ?? detectLanguage(navigator.languages?.length ? navigator.languages : [navigator.language]);
+  // The language that the person chose; if none, Basque.
+  const wanted = pageLanguage(state.selection.lang ?? null);
   const languageChanged = first || wanted !== language();
   selection = state.selection;
   setLanguage(wanted);

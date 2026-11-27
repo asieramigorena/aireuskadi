@@ -19,7 +19,7 @@ export type Classification = "SNAP" | "NFR";
 export type View = "emissions" | "air";
 
 export interface Selection {
-  /** The language that the person chose (`?lang=`). Absent: the browser decides (see i18n). */
+  /** The language that the person chose (`?lang=`). Absent: Basque (see pageLanguage in i18n). */
   lang?: Language | null;
   view: View;
   pollutant: string;

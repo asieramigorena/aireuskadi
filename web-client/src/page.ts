@@ -1,6 +1,6 @@
-// The texts of index.html that nothing else draws: the labels of the parts of the page, the credits,
-// and the language of the whole document. They are written again each time the language or the map
-// changes. Text only: nothing here is HTML.
+// The texts of index.html that nothing else draws: the labels of the parts of the page, the
+// credits, the description that search engines show, and the language of the whole document. They
+// are written again each time the language or the map changes. Text only: nothing here is HTML.
 import { language, texts } from "./i18n";
 import { mapLabel } from "./format";
 import type { View } from "./router";
@@ -23,6 +23,7 @@ export function setAccountName(name: string | null) {
 export function applyPageTexts(view: View, stationsAttribution: string | null): void {
   const words = texts();
   document.documentElement.lang = language();
+  document.querySelector('meta[name="description"]')?.setAttribute("content", words.pageDescription);
   label("controls", words.mapChoiceLabel);
   label("languages", words.languageChoiceLabel);
   label("panel", words.panelLabel);

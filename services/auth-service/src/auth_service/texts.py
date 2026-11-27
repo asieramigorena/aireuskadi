@@ -1,7 +1,7 @@
 """The words of the admin pages in the three languages of the site, and how the language is chosen.
 
-As in the map: English unless the browser asks for Basque or Spanish, and `?lang=eu|es|en` chooses
-it (the map passes its own language in its link to /admin). "Grafana" is a name: not translated.
+As in the map: Basque (the site is .eus) unless `?lang=eu|es|en` chooses another; the map passes its
+own language in its links to /user. "Grafana" is a name: not translated.
 The Basque texts are PENDING REVIEW by a Basque speaker, like the ones of the map.
 Translation by Claude
 """
@@ -110,16 +110,8 @@ def chosen_language(request: Request) -> str | None:
 
 
 def language(request: Request) -> str:
-    """The chosen language, else the first of the three that the browser asks for, else English."""
-    lang = chosen_language(request)
-    if lang:
-        return lang
-    # "es-ES,es;q=0.9,en;q=0.8": the browser lists them in its order of preference.
-    for part in request.headers.get("accept-language", "").split(","):
-        code = part.split(";")[0].strip().lower().split("-")[0]
-        if code in LANGUAGES:
-            return code
-    return "en"
+    """The chosen language, else Basque."""
+    return chosen_language(request) or "eu"
 
 
 def with_language(url: str, request: Request) -> str:

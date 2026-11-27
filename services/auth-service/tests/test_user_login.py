@@ -122,13 +122,13 @@ def test_the_failures_of_one_person_do_not_lock_the_account_for_another(
 
 
 def test_without_a_session_the_page_offers_only_the_way_back_to_the_map(admin_client):
-    page = admin_client.get("/user").text
+    page = admin_client.get("/user?lang=en").text
 
     assert ">Map</a>" in page
     assert "/grafana/" not in page
     assert 'href="/admin"' not in page
     assert "/user/logout" not in page
-    assert 'href="/user/signup"' in page
+    assert 'href="/user/signup' in page
 
 
 def test_an_admin_sees_the_way_to_grafana_the_panel_and_out(logged_in_as):
@@ -140,41 +140,35 @@ def test_an_admin_sees_the_way_to_grafana_the_panel_and_out(logged_in_as):
 
 
 def test_someone_logged_in_sees_their_account_and_not_the_login_form(logged_in_as):
-    page = logged_in_as("user2", is_admin=False).get("/user").text
+    page = logged_in_as("user2", is_admin=False).get("/user?lang=en").text
 
     assert "user2" in page
     assert 'action="/user/login"' not in page
     # Not an admin: only the map and the way out, never Grafana or the panel.
-    assert ">Map</a>" in page and 'action="/user/logout"' in page
+    assert ">Map</a>" in page and 'action="/user/logout' in page
     assert "/grafana/" not in page
     assert 'href="/admin"' not in page
 
 
-# The language: English unless the browser asks for Basque or Spanish, or ?lang= chooses it.
+# The language: Basque, like the map (the site is .eus), unless ?lang= chooses another.
 
 
-def test_the_pages_are_in_english_by_default(admin_client):
-    page = admin_client.get("/user", headers={"Accept-Language": "fr-FR,fr"}).text
+@pytest.mark.parametrize("browser", ["fr-FR,fr", "es-ES,es;q=0.9,en;q=0.8", "en"])
+def test_the_pages_are_in_basque_whatever_the_browser_asks_for(admin_client, browser):
+    page = admin_client.get("/user", headers={"Accept-Language": browser}).text
 
-    assert '<html lang="en">' in page
-    assert "Password" in page and "Log in" in page
-
-
-def test_the_language_of_the_browser_is_followed(admin_client):
-    page = admin_client.get("/user", headers={"Accept-Language": "es-ES,es;q=0.9,en;q=0.8"}).text
-
-    assert '<html lang="es">' in page
-    assert "Contraseña" in page
+    assert '<html lang="eu">' in page
+    assert "Pasahitza" in page
 
 
 def test_a_chosen_language_wins_and_stays_in_the_links_and_forms(logged_in_as):
     client = logged_in_as("user1", is_admin=True)
 
-    page = client.get("/user?lang=eu", headers={"Accept-Language": "es"}).text
+    page = client.get("/user?lang=es").text
 
-    assert '<html lang="eu">' in page
-    assert 'action="/user/logout?lang=eu"' in page
-    assert 'href="/admin?lang=eu"' in page
+    assert '<html lang="es">' in page
+    assert 'action="/user/logout?lang=es"' in page
+    assert 'href="/admin?lang=es"' in page
     # Grafana is not translated: the link goes to it as it is.
     assert 'href="/grafana/"' in page
 
@@ -192,7 +186,7 @@ def test_a_failed_login_comes_back_in_the_chosen_language(admin_client):
 def test_a_language_that_is_not_one_of_the_three_is_ignored(admin_client):
     page = admin_client.get('/admin?lang="><script>').text
 
-    assert '<html lang="en">' in page
+    assert '<html lang="eu">' in page
     assert "<script>" not in page
 
 
@@ -253,12 +247,6 @@ def test_the_redirects_are_not_kept_and_send_no_referrer(admin_client):
 
     assert answer.headers["cache-control"] == "no-store"
     assert answer.headers["referrer-policy"] == "no-referrer"
-
-
-def test_a_language_of_three_letters_is_not_taken_for_one_of_two(admin_client):
-    page = admin_client.get("/user", headers={"Accept-Language": "est"}).text
-
-    assert '<html lang="en">' in page
 
 
 def test_a_logout_with_a_token_that_is_not_ours_keeps_nothing_in_memory(admin_client):

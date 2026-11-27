@@ -13,10 +13,10 @@ It brings together:
 - **Regional trend 1990-2024** by pollutant and sector, from the Basque emissions inventory (planned).
 
 The unit of the map is the municipality (INE code). Districts and the three historical territories
-add up their municipalities. The page is in Basque, Spanish and English: it follows the language of
-the browser, and `?lang=eu|es|en` chooses one.
+add up their municipalities. The page is in Basque; Spanish and English can be chosen with its
+buttons or with `?lang=es|en`.
 
-It is published at <https://aireuskadi.taila95ab4.ts.net>.
+It is published at <https://aireuskadi.eus>.
 
 ## Run it locally
 
