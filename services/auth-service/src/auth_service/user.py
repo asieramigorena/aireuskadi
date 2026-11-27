@@ -7,7 +7,6 @@ name exists by trying to register it: the gateway allows 3 sign-ups per person p
 """
 
 import logging
-import time
 from http import HTTPStatus
 from typing import Annotated
 
@@ -133,14 +132,10 @@ def logout(request: Request):
     # expires), not its text: the same token can be written in more than one way. Only a token
     # signed by us is remembered (anyone can send a logout with any cookie), and only until it
     # would have expired anyway, so the list never grows beyond the logins of the last 8 hours.
-    logged_out = request.app.state.logged_out
     token = request.cookies.get(COOKIE)
     payload = read_token(request, token) if token else None
     if payload:
-        logged_out.add((payload["sub"], payload["exp"]))
-    now = time.time()
-    for old in [old for old in logged_out if old[1] < now]:
-        logged_out.discard(old)
+        request.app.state.logged_out.add(payload["sub"], payload["exp"])
     response = redirect(with_language("/user", request))
     response.delete_cookie(COOKIE, httponly=True, secure=True, samesite="strict")
     return response

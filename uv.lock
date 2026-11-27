@@ -180,6 +180,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "pyjwt" },
     { name = "python-multipart" },
+    { name = "redis" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -196,6 +197,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "pyjwt", specifier = ">=2.9" },
     { name = "python-multipart", specifier = ">=0.0.9" },
+    { name = "redis", specifier = ">=5" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
 

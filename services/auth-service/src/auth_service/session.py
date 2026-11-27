@@ -16,7 +16,9 @@ from fastapi.responses import RedirectResponse
 
 from auth_service.admin_pages import HEADERS
 
-COOKIE = "aireuskadi_session"
+# __Host-: the browser keeps it only with this name, for path / and over https, so that no other
+# name under the domain can set or replace it. Security fix by Claude (audit 2026-11-26).
+COOKIE = "__Host-aireuskadi_session"
 HOURS = 8
 # After 5 failed logins of the same person with the same name in 15 minutes, they are refused until
 # the failures are older. Every name counts, real or not: a 429 that only real names got would say

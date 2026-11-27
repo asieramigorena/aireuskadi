@@ -48,8 +48,10 @@ async def grafana(request: Request, path: str):
         return RedirectResponse("/admin", status_code=303)
 
     headers = headers_to_send(request)
-    # The cookies of Grafana go on; ours does not.
-    cookies = [f"{key}={value}" for key, value in request.cookies.items() if key != COOKIE]
+    # The cookies of Grafana go on; ours does not, nor the one it had before __Host- (browsers send it
+    # until it expires). Security fix by Claude (audit 2026-11-26).
+    ours = (COOKIE, "aireuskadi_session")
+    cookies = [f"{key}={value}" for key, value in request.cookies.items() if key not in ours]
     if cookies:
         headers["cookie"] = "; ".join(cookies)
     headers["x-webauth-user"] = name

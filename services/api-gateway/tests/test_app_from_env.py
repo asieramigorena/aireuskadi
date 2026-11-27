@@ -99,3 +99,22 @@ def test_the_gateway_that_runs_limits_each_person_to_120_requests_a_minute(monke
     monkeypatch.delenv("WEB_DIR", raising=False)
 
     assert app_from_env().state.rate_limit.limit == 120
+
+
+def test_without_the_network_of_the_tunnels_x_forwarded_for_is_believed_from_nobody(monkeypatch):
+    # Forgetting the variable must not open the door: then everybody is the address that connects.
+    monkeypatch.delenv("TUNNEL_NETWORK", raising=False)
+
+    with TestClient(app_from_env(), client=("10.89.1.3", 50000)) as client:
+        for made_up in ("203.0.113.1", "203.0.113.2"):
+            client.get("/api/v1/no-route", headers={"X-Forwarded-For": made_up})
+
+    counts = client.app.state.rate_limit.counts
+    assert list(counts) == ["10.89.1.3"]
+
+
+def test_a_network_of_the_tunnels_that_is_not_one_stops_the_start(monkeypatch):
+    monkeypatch.setenv("TUNNEL_NETWORK", "10.89.1.0/33")
+
+    with pytest.raises(SystemExit, match="TUNNEL_NETWORK"):
+        app_from_env()

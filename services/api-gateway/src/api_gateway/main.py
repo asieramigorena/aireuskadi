@@ -1,6 +1,7 @@
 """Gateway entry point: puts the application together. The routes of the API are in routes.py,
 the admin pages in admin.py, Grafana in grafana.py and the web page in web.py."""
 
+import ipaddress
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -26,6 +27,10 @@ PREFIX = "/api/v1"
 REQUESTS_PER_MINUTE = 120
 # Sign-ups per person and hour (/user/signup): enough for a person, slow for a script.
 SIGN_UPS_PER_HOUR = 3
+# Requests that send a key to a provider, per person and hour (insight.py): questions that were not
+# kept and lists of models. Enough for a person, slow for trying stolen keys.
+# Security fix by Claude (audit 2026-11-26).
+KEY_TRIES_PER_HOUR = 60
 
 
 def create_app(
@@ -39,6 +44,7 @@ def create_app(
     grafana_client: httpx.AsyncClient | None = None,
     rate_limit: RateLimit | None = None,
     insight: httpx.AsyncClient | None = None,
+    tunnel_network: str | None = None,
 ) -> FastAPI:
     """`emissions` and `air_quality` are the clients of the two services of the API, and
     `cache` the one of Redis (none: every question goes to the service). `docs` adds /docs
@@ -49,7 +55,9 @@ def create_app(
     /admin does not exist. With `grafana_client` too, admins see Grafana at /grafana/.
     `rate_limit` is how many requests a person can make each minute (none: no limit).
     `insight` is the client of the insight service (the questions to a language model): without it
-    the questions do not exist."""
+    the questions do not exist.
+    `tunnel_network` is the network of the tunnels ("10.89.1.0/24"): X-Forwarded-For is believed
+    only from it (rate_limit.py). "": from nobody. None: from anybody (the tests)."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -82,6 +90,8 @@ def create_app(
     app.state.emissions = emissions
     app.state.air_quality = air_quality
     app.state.cache = cache
+    # Security fix by Claude (audit 2026-11-26): whose X-Forwarded-For is believed.
+    app.state.tunnel_network = tunnel_network
     install_problem_documents(app)
     # Before the request log, so that the log sees the requests that the limit stops (a 429).
     if rate_limit:
@@ -92,6 +102,7 @@ def create_app(
     app.include_router(routes.router, prefix=PREFIX)
     if insight:
         app.state.insight = insight
+        app.state.key_tries = RateLimit(limit=KEY_TRIES_PER_HOUR, window=3600)
         app.state.insight_cache = Cache(cache.redis, prefix=INSIGHT_PREFIX) if cache else None
         app.include_router(insight_routes.router, prefix=PREFIX)
     # The description of the routes is the list of what can be probed: only when asked.
@@ -130,9 +141,9 @@ def cache_from_env() -> Cache | None:
 
 def app_from_env() -> FastAPI:
     """Build the application from EMISSIONS_URL, AIR_QUALITY_URL, AUTH_URL and GRAFANA_URL (each
-    with the name of the service in the compose as default) and WEB_DIR. It is what the
-    container runs: uvicorn finds it by name in the CMD of gateway.Dockerfile (--factory), so no
-    Python code calls it."""
+    with the name of the service in the compose as default), WEB_DIR and TUNNEL_NETWORK. It is
+    what the container runs: uvicorn finds it by name in the CMD of gateway.Dockerfile (--factory),
+    so no Python code calls it."""
     configure_logging("api_gateway", uvicorn=True)
     emissions = service_client("EMISSIONS_URL", "http://emissions-service:8000")
     air_quality = service_client("AIR_QUALITY_URL", "http://air-quality-service:8000")
@@ -157,7 +168,21 @@ def app_from_env() -> FastAPI:
             timeout=httpx.Timeout(25.0, connect=3.0),
             follow_redirects=False,
         ),
+        tunnel_network=tunnel_network_from_env(),
     )
+
+
+def tunnel_network_from_env() -> str:
+    """The network of the tunnels (TUNNEL_NETWORK), whose X-Forwarded-For is believed. Without it,
+    "": the header is believed from nobody, so a forgotten variable does not open the door. A value
+    that is not a network stops the start. Security fix by Claude (audit 2026-11-26)."""
+    value = os.environ.get("TUNNEL_NETWORK", "")
+    if value:
+        try:
+            ipaddress.ip_network(value)
+        except ValueError:
+            raise SystemExit(f"TUNNEL_NETWORK ({value}) is not a network such as 10.89.1.0/24")
+    return value
 
 
 def web_dir_from_env() -> Path | None:

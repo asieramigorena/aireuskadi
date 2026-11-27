@@ -8,6 +8,7 @@ import pytest
 from api_gateway.cache import Cache
 from api_gateway.insight import unit_facts, unit_key
 from api_gateway.main import create_app
+from api_gateway.rate_limit import RateLimit
 from fastapi.testclient import TestClient
 
 READING = {
@@ -103,7 +104,7 @@ def ask(upstreams, emissions, air_quality, insight, redis, auth):
         ),
     )
     with TestClient(app, base_url="https://testserver") as client:
-        client.cookies.set("aireuskadi_session", "the-jwt")
+        client.cookies.set("__Host-aireuskadi_session", "the-jwt")
         client.headers["X-LLM-Key"] = KEY
         yield client
 
@@ -252,7 +253,7 @@ def test_a_year_without_emissions_is_one_key_for_all_such_years():
 def test_without_a_session_the_answer_is_401_and_no_model_is_asked(ask, auth, insight, cookie):
     ask.cookies.clear()
     if cookie:
-        ask.cookies.set("aireuskadi_session", cookie)
+        ask.cookies.set("__Host-aireuskadi_session", cookie)
         auth.respond(status=401, body=b'{"detail": "Not logged in."}')
 
     answer = ask.get("/api/v1/insights/who_ratio?lang=es&provider=groq&model=m")
@@ -344,3 +345,20 @@ def test_when_the_models_cannot_be_listed_it_says_why(ask, insight, status, ours
 
     assert answer.status_code == ours
     assert "inside" not in answer.text
+
+
+def test_each_person_can_try_keys_so_many_times_an_hour_whatever_the_account(ask, insight):
+    # The insight service counts per account, but one person can make several accounts: the gateway
+    # counts the keys that each person sends to a provider, questions and lists of models alike.
+    ask.app.state.key_tries = RateLimit(limit=2, window=3600)
+    insight.respond(body=b'{"models": ["a-model"]}')
+    models = "/api/v1/llm/models?provider=groq"
+
+    statuses = [
+        ask.get(models, headers={"X-Forwarded-For": "203.0.113.7"}).status_code for _ in range(3)
+    ]
+    other = ask.get(models, headers={"X-Forwarded-For": "198.51.100.1"}).status_code
+
+    assert statuses == [200, 200, 429]
+    assert other == 200
+    assert len(insight.requests) == 3

@@ -32,11 +32,13 @@ def test_the_auth_service_is_asked_with_our_cookie_only(admin_client, auth):
     admin_client.get("/grafana/")
 
     assert auth.requests[0].url.path == "/me"
-    assert auth.requests[0].headers["cookie"] == "aireuskadi_session=the-jwt"
+    assert auth.requests[0].headers["cookie"] == "__Host-aireuskadi_session=the-jwt"
 
 
 def test_grafana_gets_our_user_and_nothing_the_browser_could_forge(admin_client, grafana):
     admin_client.cookies.set("grafana_session", "g1")
+    # The name of our cookie before __Host-: browsers send it until it expires.
+    admin_client.cookies.set("aireuskadi_session", "an-old-jwt")
 
     answer = admin_client.post(
         "/grafana/api/ds/query?from=now-1h",
@@ -117,8 +119,8 @@ def test_a_strange_answer_of_the_auth_service_is_not_an_admin(admin_client, auth
 
 def test_grafana_cannot_set_our_cookie(admin_client, grafana):
     # A browser trims the spaces around the name: this one would replace ours too.
-    grafana.respond(headers={"set-cookie": "aireuskadi_session =from-grafana; Path=/"})
+    grafana.respond(headers={"set-cookie": "__Host-aireuskadi_session =from-grafana; Path=/"})
 
     answer = admin_client.get("/grafana/")
 
-    assert "aireuskadi_session" not in answer.headers.get("set-cookie", "")
+    assert "__Host-aireuskadi_session" not in answer.headers.get("set-cookie", "")
